@@ -8,6 +8,9 @@
 *
 
 # But not these files...
+!/staticfiles/style.css
+!/templates/*.tmpl
+
 !/.gitignore
 
 !*.go
