@@ -2,8 +2,8 @@
 
 .PHONY: css-build
 css-build:
-	rm -f staticfiles/style.css
-	stylus stylus --out staticfiles --prefix finch- --compress
+	rm -rf staticfiles/css/
+	stylus stylus --out staticfiles/css --prefix finch- --compress
 
 .PHONY: go-doc
 go-doc:

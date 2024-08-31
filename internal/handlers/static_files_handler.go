@@ -11,7 +11,8 @@ func NewStaticFilesHandler(fs fs.FS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/static/style.css":
-			serveStaticFile(w, fs, "style.css")
+			w.Header().Set("content-type", "text/css")
+			serveStaticFile(w, fs, "css/style.css")
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}

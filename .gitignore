@@ -18,7 +18,8 @@
 !/.tool-versions
 !/.golangci.yml
 
-!/staticfiles/style.css
+!/stylus/*.styl
+!/staticfiles/css/*.css
 !/templates/*.tmpl
 
 # ...even if they are in subdirectories
