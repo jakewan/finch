@@ -8,20 +8,18 @@
 *
 
 # But not these files...
-!/staticfiles/style.css
-!/templates/*.tmpl
-
 !/.gitignore
-
 !*.go
 !go.sum
 !go.mod
-
 !README.md
-!LICENSE
+!/LICENSE
+!/Makefile
+!/.tool-versions
+!/.golangci.yml
 
-# !Makefile
-!.tool-versions
+!/staticfiles/style.css
+!/templates/*.tmpl
 
 # ...even if they are in subdirectories
 !*/
