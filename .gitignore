@@ -9,16 +9,18 @@
 
 # But not these files...
 !/.gitignore
-
 !*.go
 !go.sum
 !go.mod
-
 !README.md
-!LICENSE
+!/LICENSE
+!/Makefile
+!/.tool-versions
+!/.golangci.yml
 
-# !Makefile
-!.tool-versions
+!/stylus/*.styl
+!/staticfiles/css/*.css
+!/templates/*.tmpl
 
 # ...even if they are in subdirectories
 !*/
