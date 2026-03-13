@@ -1,11 +1,11 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QUrl>
 
 #include "finchclient.h"
 
 #include <cstdlib>
-#include <filesystem>
 #include <string>
 
 static std::string socketPath()
@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("finchClient", client);
-    engine.loadFromModule("Finch", "Main");
+    engine.load(QUrl(QStringLiteral("qrc:/Finch/qml/Main.qml")));
 
     if (engine.rootObjects().isEmpty())
         return -1;
