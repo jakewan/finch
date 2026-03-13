@@ -1,0 +1,64 @@
+name: Go CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+
+      - name: Install protoc plugins
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
+
+      - name: Generate protobuf code
+        run: buf generate
+
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.11.3
+          working-directory: core
+
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.11.3
+          working-directory: daemon
+
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.11.3
+          working-directory: mcp
+
+      - name: Test core
+        run: cd core && go test ./...
+
+      - name: Test daemon
+        run: cd daemon && go test ./...
+
+      - name: Test MCP server
+        run: cd mcp && go test ./...
+
+  proto-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: bufbuild/buf-action@v1
+        with:
+          lint: true
+          breaking: false
+          pr_comment: false

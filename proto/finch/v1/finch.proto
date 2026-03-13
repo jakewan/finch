@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package finch.v1;
+
+option go_package = "github.com/jakewan/finch/daemon/gen/finch/v1;finchv1";
+
+service FinchService {
+  rpc Ping(PingRequest) returns (PingResponse);
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+  rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+}
+
+message PingRequest {}
+
+message PingResponse {
+  string version = 1;
+}
+
+enum AccountType {
+  ACCOUNT_TYPE_UNSPECIFIED = 0;
+  ACCOUNT_TYPE_CHECKING = 1;
+  ACCOUNT_TYPE_SAVINGS = 2;
+  ACCOUNT_TYPE_CREDIT_CARD = 3;
+  ACCOUNT_TYPE_AUTO_LOAN = 4;
+  ACCOUNT_TYPE_PERSONAL_LOAN = 5;
+  ACCOUNT_TYPE_LINE_OF_CREDIT = 6;
+  ACCOUNT_TYPE_BROKERAGE = 7;
+}
+
+message Account {
+  int64 id = 1;
+  string name = 2;
+  AccountType type = 3;
+}
+
+message ListAccountsRequest {}
+
+message ListAccountsResponse {
+  repeated Account accounts = 1;
+}
+
+message CreateAccountRequest {
+  string name = 1;
+  AccountType type = 2;
+}
+
+message CreateAccountResponse {
+  Account account = 1;
+}
