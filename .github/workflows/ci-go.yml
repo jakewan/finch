@@ -58,3 +58,4 @@ jobs:
         with:
           lint: true
           breaking: false
+          pr_comment: false
