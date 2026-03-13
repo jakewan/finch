@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	finchv1 "github.com/jakewan/finch/daemon/gen/finch/v1"
@@ -104,6 +105,7 @@ func newCreateAccountHandler(client finchv1.FinchServiceClient) func(context.Con
 			for k := range accountTypeMap {
 				valid = append(valid, k)
 			}
+			slices.Sort(valid)
 			return nil, CreateAccountOutput{}, fmt.Errorf("unknown account type %q; valid types: %s", input.Type, strings.Join(valid, ", "))
 		}
 		resp, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{

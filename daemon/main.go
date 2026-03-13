@@ -49,6 +49,7 @@ func main() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
+		signal.Stop(sigCh)
 		log.Println("shutting down")
 		srv.GracefulStop()
 	}()

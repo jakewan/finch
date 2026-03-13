@@ -49,6 +49,9 @@ jobs:
       - name: Test daemon
         run: cd daemon && go test ./...
 
+      - name: Test MCP server
+        run: cd mcp && go test ./...
+
   proto-check:
     runs-on: ubuntu-latest
     steps:

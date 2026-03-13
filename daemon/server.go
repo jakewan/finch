@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/jakewan/finch/core"
@@ -25,7 +24,7 @@ func (s *finchServer) Ping(_ context.Context, _ *finchv1.PingRequest) (*finchv1.
 func (s *finchServer) ListAccounts(ctx context.Context, _ *finchv1.ListAccountsRequest) (*finchv1.ListAccountsResponse, error) {
 	accounts, err := s.db.ListAccounts(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list accounts: %w", err)
+		return nil, status.Errorf(codes.Internal, "list accounts: %v", err)
 	}
 	resp := &finchv1.ListAccountsResponse{}
 	for _, a := range accounts {
@@ -47,7 +46,7 @@ func (s *finchServer) CreateAccount(ctx context.Context, req *finchv1.CreateAcco
 	}
 	acct, err := s.db.CreateAccount(ctx, req.Name, core.AccountType(req.Type))
 	if err != nil {
-		return nil, fmt.Errorf("create account: %w", err)
+		return nil, status.Errorf(codes.Internal, "create account: %v", err)
 	}
 	return &finchv1.CreateAccountResponse{
 		Account: &finchv1.Account{
