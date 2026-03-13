@@ -1,0 +1,43 @@
+name: Bug Report
+description: Report a bug — describe the problem, not just the symptom.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem description
+      description: >
+        What is the actual problem? Describe the gap between current behavior
+        and expected behavior.
+      placeholder: "When I do X, Y happens instead of Z."
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >
+        What did you observe? Reproduction steps, error messages, specific
+        scenarios.
+      placeholder: |
+        Steps to reproduce:
+        1. ...
+        2. ...
+
+        Error message or unexpected output:
+        ```
+        ...
+        ```
+    validations:
+      required: false
+
+  - type: textarea
+    id: approaches
+    attributes:
+      label: Suggested approaches
+      description: >
+        If you have ideas for solutions, describe them here — but the problem
+        description above is more important.
+    validations:
+      required: false

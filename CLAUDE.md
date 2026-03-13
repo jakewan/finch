@@ -39,3 +39,13 @@ just test-mcp     # MCP server only
 ## Go Module Dependencies
 
 The daemon and mcp modules depend on core via `replace` directives pointing to `../core`.
+
+## CI Notes
+
+- buf-action `breaking` must be `false` until the base branch has proto files (otherwise the breaking change check fails with no baseline to compare against).
+- buf-action `pr_comment` requires write permissions — set to `false` if not needed.
+- CI must run `buf generate` (with protoc plugin installation) before lint/test steps, since generated protobuf code is not committed.
+
+## Linting
+
+- golangci-lint v2 moved generated-code exclusion to `linters.exclusions.paths` (not `issues.exclude-dirs` or `run.exclude-dirs` — both are invalid in v2).
