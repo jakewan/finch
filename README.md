@@ -22,7 +22,8 @@ mise install
 The C++/Qt app requires system-level packages. On Ubuntu/Debian:
 
 ```bash
-sudo apt install cmake qt6-base-dev qt6-declarative-dev libgrpc++-dev protobuf-compiler-grpc
+sudo apt install cmake qt6-base-dev qt6-declarative-dev qml6-module-qtquick-controls \
+  protobuf-compiler libprotobuf-dev libgrpc++-dev protobuf-compiler-grpc
 ```
 
 ## Getting Started
