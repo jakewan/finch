@@ -1,0 +1,34 @@
+name: Feature Request
+description: Suggest a feature — describe the problem it solves, not just the solution.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem description
+      description: >
+        What problem does this feature address? What gap exists today?
+        Focus on the need, not a specific implementation.
+      placeholder: "I need to ... but currently there's no way to ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence / context
+      description: >
+        What scenarios demonstrate this need? How often does it come up?
+        Any related issues or prior discussion?
+    validations:
+      required: false
+
+  - type: textarea
+    id: approaches
+    attributes:
+      label: Suggested approaches
+      description: >
+        If you have ideas for how this could work, describe them here — but
+        the problem description above is more important.
+    validations:
+      required: false
