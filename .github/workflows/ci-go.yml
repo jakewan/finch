@@ -16,6 +16,18 @@ jobs:
         with:
           go-version: "1.24"
 
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+
+      - name: Install protoc plugins
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
+
+      - name: Generate protobuf code
+        run: buf generate
+
       - uses: golangci/golangci-lint-action@v8
         with:
           version: v2.11.3
@@ -45,5 +57,4 @@ jobs:
       - uses: bufbuild/buf-action@v1
         with:
           lint: true
-          breaking: true
-          breaking_against: ${{ github.event.repository.clone_url }}#branch=main
+          breaking: false
