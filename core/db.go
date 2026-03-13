@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strconv"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -44,7 +45,7 @@ func (db *DB) Close() error {
 
 func (db *DB) migrate() error {
 	if _, err := db.conn.Exec(`CREATE TABLE IF NOT EXISTS schema_version (
-		version INTEGER NOT NULL
+		version INTEGER NOT NULL UNIQUE
 	)`); err != nil {
 		return fmt.Errorf("create schema_version table: %w", err)
 	}
@@ -63,8 +64,11 @@ func (db *DB) migrate() error {
 		return entries[i].Name() < entries[j].Name()
 	})
 
-	for i, entry := range entries {
-		version := i + 1
+	for _, entry := range entries {
+		version, err := parseMigrationVersion(entry.Name())
+		if err != nil {
+			return fmt.Errorf("parse migration filename %s: %w", entry.Name(), err)
+		}
 		if version <= current {
 			continue
 		}
@@ -93,6 +97,20 @@ func (db *DB) migrate() error {
 		}
 	}
 	return nil
+}
+
+// parseMigrationVersion extracts the numeric prefix from a migration filename
+// (e.g., "001_initial.sql" → 1).
+func parseMigrationVersion(filename string) (int, error) {
+	prefix, _, found := strings.Cut(filename, "_")
+	if !found {
+		return 0, fmt.Errorf("expected format NNN_description.sql, got %s", filename)
+	}
+	v, err := strconv.Atoi(prefix)
+	if err != nil {
+		return 0, fmt.Errorf("parse version number from %s: %w", filename, err)
+	}
+	return v, nil
 }
 
 // splitStatements splits SQL text on semicolons, filtering empty statements.

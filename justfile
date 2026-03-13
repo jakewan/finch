@@ -20,7 +20,7 @@ build-app:
     cmake --build app/build
 
 # Run all Go tests
-test: test-core test-daemon
+test: test-core test-daemon test-mcp
 
 # Run core package tests
 test-core:
@@ -29,6 +29,10 @@ test-core:
 # Run daemon tests
 test-daemon:
     cd daemon && go test ./...
+
+# Run MCP server tests
+test-mcp:
+    cd mcp && go test ./...
 
 # Run golangci-lint on all Go modules
 lint: lint-core lint-daemon lint-mcp

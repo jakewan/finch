@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	finchv1 "github.com/jakewan/finch/daemon/gen/finch/v1"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -94,9 +95,16 @@ var accountTypeMap = map[string]finchv1.AccountType{
 
 func newCreateAccountHandler(client finchv1.FinchServiceClient) func(context.Context, *mcp.CallToolRequest, CreateAccountInput) (*mcp.CallToolResult, CreateAccountOutput, error) {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, input CreateAccountInput) (*mcp.CallToolResult, CreateAccountOutput, error) {
-		acctType, ok := accountTypeMap[input.Type]
+		normalized := strings.ToUpper(strings.TrimSpace(input.Type))
+		// Accept both "CHECKING" and "ACCOUNT_TYPE_CHECKING" forms.
+		normalized = strings.TrimPrefix(normalized, "ACCOUNT_TYPE_")
+		acctType, ok := accountTypeMap[normalized]
 		if !ok {
-			return nil, CreateAccountOutput{}, fmt.Errorf("unknown account type: %s", input.Type)
+			valid := make([]string, 0, len(accountTypeMap))
+			for k := range accountTypeMap {
+				valid = append(valid, k)
+			}
+			return nil, CreateAccountOutput{}, fmt.Errorf("unknown account type %q; valid types: %s", input.Type, strings.Join(valid, ", "))
 		}
 		resp, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
 			Name: input.Name,

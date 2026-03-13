@@ -34,7 +34,7 @@ add_custom_command(
         "${GENERATED_DIR}/finch/v1/finch.grpc.pb.cc"
         "${GENERATED_DIR}/finch/v1/finch.grpc.pb.h"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${GENERATED_DIR}/finch/v1"
-    COMMAND protobuf::protoc
+    COMMAND ${Protobuf_PROTOC_EXECUTABLE}
         "--proto_path=${PROTO_DIR}"
         "--cpp_out=${GENERATED_DIR}"
         "--grpc_out=${GENERATED_DIR}"

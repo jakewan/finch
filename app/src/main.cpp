@@ -7,6 +7,7 @@
 
 #include <cstdlib>
 #include <string>
+#include <unistd.h>
 
 static std::string socketPath()
 {
@@ -24,7 +25,7 @@ int main(int argc, char* argv[])
     app.setApplicationName("Finch");
     app.setApplicationVersion("0.1.0");
 
-    auto client = new FinchClient(QString::fromStdString(socketPath()));
+    auto client = new FinchClient(QString::fromStdString(socketPath()), &app);
     client->ping();
 
     QQmlApplicationEngine engine;

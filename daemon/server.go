@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jakewan/finch/core"
 	finchv1 "github.com/jakewan/finch/daemon/gen/finch/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const version = "0.1.0"
@@ -36,6 +39,12 @@ func (s *finchServer) ListAccounts(ctx context.Context, _ *finchv1.ListAccountsR
 }
 
 func (s *finchServer) CreateAccount(ctx context.Context, req *finchv1.CreateAccountRequest) (*finchv1.CreateAccountResponse, error) {
+	if strings.TrimSpace(req.Name) == "" {
+		return nil, status.Error(codes.InvalidArgument, "account name must not be empty")
+	}
+	if req.Type == finchv1.AccountType_ACCOUNT_TYPE_UNSPECIFIED {
+		return nil, status.Error(codes.InvalidArgument, "account type must be specified")
+	}
 	acct, err := s.db.CreateAccount(ctx, req.Name, core.AccountType(req.Type))
 	if err != nil {
 		return nil, fmt.Errorf("create account: %w", err)

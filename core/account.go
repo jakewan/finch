@@ -3,7 +3,9 @@ package core
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -28,7 +30,18 @@ type Account struct {
 	UpdatedAt time.Time
 }
 
+func ValidAccountType(t AccountType) bool {
+	return t >= AccountTypeChecking && t <= AccountTypeBrokerage
+}
+
 func (db *DB) CreateAccount(ctx context.Context, name string, accountType AccountType) (*Account, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errors.New("account name must not be empty")
+	}
+	if !ValidAccountType(accountType) {
+		return nil, fmt.Errorf("invalid account type: %d", accountType)
+	}
 	now := time.Now().UTC()
 	result, err := db.conn.ExecContext(ctx,
 		"INSERT INTO accounts (name, type, created_at, updated_at) VALUES (?, ?, ?, ?)",

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	finchv1 "github.com/jakewan/finch/daemon/gen/finch/v1"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -31,7 +32,9 @@ func main() {
 
 	// Verify connectivity before starting the MCP server.
 	client := finchv1.NewFinchServiceClient(conn)
-	pingResp, err := client.Ping(context.Background(), &finchv1.PingRequest{})
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer pingCancel()
+	pingResp, err := client.Ping(pingCtx, &finchv1.PingRequest{})
 	if err != nil {
 		log.Fatalf("ping daemon: %v", err)
 	}

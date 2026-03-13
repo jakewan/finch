@@ -47,3 +47,21 @@ func TestCreateAndListAccounts(t *testing.T) {
 		t.Fatalf("expected second account Savings, got %s", accounts[1].Name)
 	}
 }
+
+func TestCreateAccountValidation(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	if _, err := db.CreateAccount(ctx, "", core.AccountTypeChecking); err == nil {
+		t.Fatal("expected error for empty name")
+	}
+	if _, err := db.CreateAccount(ctx, "   ", core.AccountTypeChecking); err == nil {
+		t.Fatal("expected error for whitespace-only name")
+	}
+	if _, err := db.CreateAccount(ctx, "Test", core.AccountTypeUnspecified); err == nil {
+		t.Fatal("expected error for unspecified account type")
+	}
+	if _, err := db.CreateAccount(ctx, "Test", core.AccountType(99)); err == nil {
+		t.Fatal("expected error for invalid account type")
+	}
+}

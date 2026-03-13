@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net"
 	"os"
@@ -30,7 +31,9 @@ func main() {
 	}
 
 	// Remove stale socket file from a previous run.
-	_ = os.Remove(sockPath)
+	if err := os.Remove(sockPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Fatalf("remove stale socket %s: %v", sockPath, err)
+	}
 
 	lis, err := net.Listen("unix", sockPath)
 	if err != nil {
