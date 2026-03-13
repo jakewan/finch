@@ -1,6 +1,6 @@
 ## Overview
 
-<!-- What is the purpose (ikigai) of this change? Why does it matter? -->
+<!-- What is the purpose of this change? Why does it matter? -->
 
 ## Changes
 

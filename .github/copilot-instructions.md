@@ -5,8 +5,8 @@
 ### Check 1: Overview Section Validation
 
 Every PR must include an **Overview** section that states:
-- The purpose (ikigai) of the change — why it matters
-- Whether the change is kaizen (incremental improvement) or innovation (transformative)
+- The purpose of the change — why it matters
+- Whether the change is an incremental improvement or a transformative/innovative change
 
 **Assessment:** Post a pass/fail comment. Fail if the Overview section is missing or lacks a clear purpose statement.
 
