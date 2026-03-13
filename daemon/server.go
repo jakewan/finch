@@ -1,0 +1,50 @@
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/jakewan/finch/core"
+	finchv1 "github.com/jakewan/finch/daemon/gen/finch/v1"
+)
+
+const version = "0.1.0"
+
+type finchServer struct {
+	finchv1.UnimplementedFinchServiceServer
+	db *core.DB
+}
+
+func (s *finchServer) Ping(_ context.Context, _ *finchv1.PingRequest) (*finchv1.PingResponse, error) {
+	return &finchv1.PingResponse{Version: version}, nil
+}
+
+func (s *finchServer) ListAccounts(ctx context.Context, _ *finchv1.ListAccountsRequest) (*finchv1.ListAccountsResponse, error) {
+	accounts, err := s.db.ListAccounts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list accounts: %w", err)
+	}
+	resp := &finchv1.ListAccountsResponse{}
+	for _, a := range accounts {
+		resp.Accounts = append(resp.Accounts, &finchv1.Account{
+			Id:   a.ID,
+			Name: a.Name,
+			Type: finchv1.AccountType(a.Type),
+		})
+	}
+	return resp, nil
+}
+
+func (s *finchServer) CreateAccount(ctx context.Context, req *finchv1.CreateAccountRequest) (*finchv1.CreateAccountResponse, error) {
+	acct, err := s.db.CreateAccount(ctx, req.Name, core.AccountType(req.Type))
+	if err != nil {
+		return nil, fmt.Errorf("create account: %w", err)
+	}
+	return &finchv1.CreateAccountResponse{
+		Account: &finchv1.Account{
+			Id:   acct.ID,
+			Name: acct.Name,
+			Type: finchv1.AccountType(acct.Type),
+		},
+	}, nil
+}

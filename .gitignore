@@ -1,0 +1,35 @@
+# Go
+/core/gen/
+/daemon/gen/
+/mcp/gen/
+
+# Protobuf generated code
+/app/src/gen/
+
+# Go binaries
+/daemon/finch-daemon
+/mcp/finch-mcp
+/mcp/mcp
+
+# Qt build
+/app/build/
+
+# SQLite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude/

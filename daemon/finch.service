@@ -1,0 +1,12 @@
+[Unit]
+Description=Finch personal finance daemon
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/finch-daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
