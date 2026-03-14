@@ -163,6 +163,9 @@ func (s *finchServer) RecordTransaction(ctx context.Context, req *finchv1.Record
 	if req.AccountId == "" {
 		return nil, status.Error(codes.InvalidArgument, "account_id must not be empty")
 	}
+	if req.Status == finchv1.TransactionStatus_TRANSACTION_STATUS_UNSPECIFIED {
+		return nil, status.Error(codes.InvalidArgument, "transaction status must be specified")
+	}
 	txnDate, err := time.Parse(time.DateOnly, req.Date)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid date: %v", err)
@@ -190,6 +193,9 @@ func (s *finchServer) UpdateTransactionStatus(ctx context.Context, req *finchv1.
 	if req.TransactionId == "" {
 		return nil, status.Error(codes.InvalidArgument, "transaction_id must not be empty")
 	}
+	if req.NewStatus == finchv1.TransactionStatus_TRANSACTION_STATUS_UNSPECIFIED {
+		return nil, status.Error(codes.InvalidArgument, "new_status must be specified")
+	}
 	if err := s.db.UpdateTransactionStatus(ctx, req.TransactionId, core.TransactionStatus(req.NewStatus)); err != nil {
 		return nil, status.Errorf(codes.Internal, "update transaction status: %v", err)
 	}
@@ -202,6 +208,9 @@ func (s *finchServer) CreateTransfer(ctx context.Context, req *finchv1.CreateTra
 	}
 	if req.Amount <= 0 {
 		return nil, status.Error(codes.InvalidArgument, "amount must be positive")
+	}
+	if req.Status == finchv1.TransactionStatus_TRANSACTION_STATUS_UNSPECIFIED {
+		return nil, status.Error(codes.InvalidArgument, "transaction status must be specified")
 	}
 	txnDate, err := time.Parse(time.DateOnly, req.Date)
 	if err != nil {

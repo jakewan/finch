@@ -230,6 +230,9 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 	if params.Name == "" {
 		return errors.New("transfer name must not be empty")
 	}
+	if !ValidTransactionStatus(params.Status) {
+		return fmt.Errorf("invalid transaction status: %d", params.Status)
+	}
 
 	sourceID := uuid.New().String()
 	destID := uuid.New().String()
@@ -241,7 +244,7 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 	}
 
 	// Source transaction (negative amount — money leaving).
-	sourcePayload, _ := json.Marshal(TransactionRecordedPayload{
+	sourcePayload, err := json.Marshal(TransactionRecordedPayload{
 		AccountID:       params.SourceAccountID,
 		Date:            dateStr,
 		Amount:          -params.Amount,
@@ -249,6 +252,9 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 		Status:          int(params.Status),
 		RecurringRuleID: params.RecurringRuleID,
 	})
+	if err != nil {
+		return fmt.Errorf("marshal source payload: %w", err)
+	}
 	if _, err := appendEvents(ctx, tx, aggregateTypeTransaction, sourceID, []NewEvent{
 		{EventType: EventTransactionRecorded, Payload: sourcePayload},
 	}); err != nil {
@@ -257,7 +263,7 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 	}
 
 	// Destination transaction (positive amount — money arriving).
-	destPayload, _ := json.Marshal(TransactionRecordedPayload{
+	destPayload, err := json.Marshal(TransactionRecordedPayload{
 		AccountID:       params.DestinationAccountID,
 		Date:            dateStr,
 		Amount:          params.Amount,
@@ -265,6 +271,9 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 		Status:          int(params.Status),
 		RecurringRuleID: params.RecurringRuleID,
 	})
+	if err != nil {
+		return fmt.Errorf("marshal dest payload: %w", err)
+	}
 	if _, err := appendEvents(ctx, tx, aggregateTypeTransaction, destID, []NewEvent{
 		{EventType: EventTransactionRecorded, Payload: destPayload},
 	}); err != nil {
@@ -273,7 +282,7 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 	}
 
 	// Transfer event linking both sides.
-	transferPayload, _ := json.Marshal(TransferCreatedPayload{
+	transferPayload, err := json.Marshal(TransferCreatedPayload{
 		SourceAccountID:      params.SourceAccountID,
 		DestinationAccountID: params.DestinationAccountID,
 		RecurringRuleID:      params.RecurringRuleID,
@@ -282,6 +291,9 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 		SourceTransactionID:  sourceID,
 		DestTransactionID:    destID,
 	})
+	if err != nil {
+		return fmt.Errorf("marshal transfer payload: %w", err)
+	}
 	// Record the transfer event on the source transaction aggregate for traceability.
 	if _, err := appendEvents(ctx, tx, aggregateTypeTransaction, sourceID, []NewEvent{
 		{EventType: EventTransferCreated, Payload: transferPayload},
