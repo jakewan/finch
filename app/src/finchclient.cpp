@@ -1,6 +1,7 @@
 #include "finchclient.h"
 
 #include <QTimer>
+#include <QVariantMap>
 #include <QtConcurrent>
 #include <chrono>
 #include <grpcpp/grpcpp.h>
@@ -98,8 +99,10 @@ void FinchClient::onListAccountsFinished()
 
     if (result.ok) {
         m_accounts = result.accounts;
-        emit accountsChanged();
+    } else {
+        m_accounts.clear();
     }
+    emit accountsChanged();
 }
 
 void FinchClient::onPingFinished()

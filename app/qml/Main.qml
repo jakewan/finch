@@ -71,7 +71,8 @@ ApplicationWindow {
         ListView {
             anchors.fill: parent
             anchors.margins: 16
-            visible: finchClient.accounts.length > 0
+            visible: finchClient.connectionState === FinchClient.Connected
+                     && finchClient.accounts.length > 0
             model: finchClient.accounts
             spacing: 4
             delegate: ItemDelegate {
