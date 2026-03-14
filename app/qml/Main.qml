@@ -1,15 +1,24 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt.labs.settings
 import Finch 1.0
 
 ApplicationWindow {
+    id: window
     visible: true
     width: 1024
     height: 768
     minimumWidth: 640
     minimumHeight: 480
     title: "Finch"
+
+    Settings {
+        property alias x: window.x
+        property alias y: window.y
+        property alias width: window.width
+        property alias height: window.height
+    }
 
     header: ToolBar {
         RowLayout {
