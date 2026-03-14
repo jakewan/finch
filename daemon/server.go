@@ -56,3 +56,24 @@ func (s *finchServer) CreateAccount(ctx context.Context, req *finchv1.CreateAcco
 		},
 	}, nil
 }
+
+func (s *finchServer) GetAccountHistory(ctx context.Context, req *finchv1.GetAccountHistoryRequest) (*finchv1.GetAccountHistoryResponse, error) {
+	if strings.TrimSpace(req.AccountId) == "" {
+		return nil, status.Error(codes.InvalidArgument, "account_id must not be empty")
+	}
+	events, err := s.db.GetAccountHistory(ctx, req.AccountId)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get account history: %v", err)
+	}
+	resp := &finchv1.GetAccountHistoryResponse{}
+	for _, e := range events {
+		resp.Events = append(resp.Events, &finchv1.AccountEvent{
+			Id:         e.ID,
+			EventType:  e.EventType,
+			Payload:    string(e.Payload),
+			RecordedAt: e.RecordedAt.Unix(),
+			Sequence:   e.Sequence,
+		})
+	}
+	return resp, nil
+}

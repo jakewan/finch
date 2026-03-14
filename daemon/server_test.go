@@ -77,6 +77,9 @@ func TestCreateAndListAccountsViaGRPC(t *testing.T) {
 	if createResp.Account.Name != "Test Checking" {
 		t.Fatalf("expected name Test Checking, got %s", createResp.Account.Name)
 	}
+	if createResp.Account.Id == "" {
+		t.Fatal("expected non-empty account ID")
+	}
 
 	listResp, err := client.ListAccounts(ctx, &finchv1.ListAccountsRequest{})
 	if err != nil {
@@ -84,5 +87,31 @@ func TestCreateAndListAccountsViaGRPC(t *testing.T) {
 	}
 	if len(listResp.Accounts) != 1 {
 		t.Fatalf("expected 1 account, got %d", len(listResp.Accounts))
+	}
+}
+
+func TestGetAccountHistoryViaGRPC(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+
+	createResp, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
+		Name: "History Test",
+		Type: finchv1.AccountType_ACCOUNT_TYPE_SAVINGS,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	histResp, err := client.GetAccountHistory(ctx, &finchv1.GetAccountHistoryRequest{
+		AccountId: createResp.Account.Id,
+	})
+	if err != nil {
+		t.Fatalf("GetAccountHistory: %v", err)
+	}
+	if len(histResp.Events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(histResp.Events))
+	}
+	if histResp.Events[0].EventType != "AccountCreated" {
+		t.Fatalf("expected AccountCreated, got %s", histResp.Events[0].EventType)
 	}
 }

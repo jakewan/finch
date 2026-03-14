@@ -8,6 +8,7 @@ service FinchService {
   rpc Ping(PingRequest) returns (PingResponse);
   rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
   rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+  rpc GetAccountHistory(GetAccountHistoryRequest) returns (GetAccountHistoryResponse);
 }
 
 message PingRequest {}
@@ -28,7 +29,7 @@ enum AccountType {
 }
 
 message Account {
-  int64 id = 1;
+  string id = 1;
   string name = 2;
   AccountType type = 3;
 }
@@ -46,4 +47,20 @@ message CreateAccountRequest {
 
 message CreateAccountResponse {
   Account account = 1;
+}
+
+message GetAccountHistoryRequest {
+  string account_id = 1;
+}
+
+message AccountEvent {
+  int64 id = 1;
+  string event_type = 2;
+  string payload = 3;
+  int64 recorded_at = 4;
+  int64 sequence = 5;
+}
+
+message GetAccountHistoryResponse {
+  repeated AccountEvent events = 1;
 }

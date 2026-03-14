@@ -25,6 +25,11 @@ func registerTools(server *mcp.Server, client finchv1.FinchServiceClient) {
 		Name:        "create_account",
 		Description: "Create a new financial account.",
 	}, newCreateAccountHandler(client))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_account_history",
+		Description: "Get the event history for an account, showing all changes over time.",
+	}, newGetAccountHistoryHandler(client))
 }
 
 // Ping
@@ -48,7 +53,7 @@ func newPingHandler(client finchv1.FinchServiceClient) func(context.Context, *mc
 
 type ListAccountsInput struct{}
 type AccountInfo struct {
-	ID   int64  `json:"id"`
+	ID   string `json:"id"`
 	Name string `json:"name"`
 	Type string `json:"type"`
 }
@@ -122,5 +127,43 @@ func newCreateAccountHandler(client finchv1.FinchServiceClient) func(context.Con
 				Type: resp.Account.Type.String(),
 			},
 		}, nil
+	}
+}
+
+// GetAccountHistory
+
+type GetAccountHistoryInput struct {
+	AccountID string `json:"account_id" jsonschema:"the UUID of the account"`
+}
+type AccountEventInfo struct {
+	ID         int64  `json:"id"`
+	EventType  string `json:"event_type"`
+	Payload    string `json:"payload"`
+	RecordedAt int64  `json:"recorded_at"`
+	Sequence   int64  `json:"sequence"`
+}
+type GetAccountHistoryOutput struct {
+	Events []AccountEventInfo `json:"events"`
+}
+
+func newGetAccountHistoryHandler(client finchv1.FinchServiceClient) func(context.Context, *mcp.CallToolRequest, GetAccountHistoryInput) (*mcp.CallToolResult, GetAccountHistoryOutput, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, input GetAccountHistoryInput) (*mcp.CallToolResult, GetAccountHistoryOutput, error) {
+		resp, err := client.GetAccountHistory(ctx, &finchv1.GetAccountHistoryRequest{
+			AccountId: input.AccountID,
+		})
+		if err != nil {
+			return nil, GetAccountHistoryOutput{}, fmt.Errorf("get account history: %w", err)
+		}
+		events := make([]AccountEventInfo, len(resp.Events))
+		for i, e := range resp.Events {
+			events[i] = AccountEventInfo{
+				ID:         e.Id,
+				EventType:  e.EventType,
+				Payload:    e.Payload,
+				RecordedAt: e.RecordedAt,
+				Sequence:   e.Sequence,
+			}
+		}
+		return nil, GetAccountHistoryOutput{Events: events}, nil
 	}
 }
