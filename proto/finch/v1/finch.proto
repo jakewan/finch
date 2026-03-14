@@ -8,6 +8,16 @@ service FinchService {
   rpc Ping(PingRequest) returns (PingResponse);
   rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
   rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+  rpc GetAccountHistory(GetAccountHistoryRequest) returns (GetAccountHistoryResponse);
+  rpc CreateRecurringRule(CreateRecurringRuleRequest) returns (CreateRecurringRuleResponse);
+  rpc ListRecurringRules(ListRecurringRulesRequest) returns (ListRecurringRulesResponse);
+  rpc UpdateRecurringRuleAmount(UpdateRecurringRuleAmountRequest) returns (UpdateRecurringRuleAmountResponse);
+  rpc GetRecurringRuleHistory(GetRecurringRuleHistoryRequest) returns (GetRecurringRuleHistoryResponse);
+  rpc RecordTransaction(RecordTransactionRequest) returns (RecordTransactionResponse);
+  rpc UpdateTransactionStatus(UpdateTransactionStatusRequest) returns (UpdateTransactionStatusResponse);
+  rpc CreateTransfer(CreateTransferRequest) returns (CreateTransferResponse);
+  rpc ProjectBalances(ProjectBalancesRequest) returns (ProjectBalancesResponse);
+  rpc ProjectBalanceOnDate(ProjectBalanceOnDateRequest) returns (ProjectBalanceOnDateResponse);
 }
 
 message PingRequest {}
@@ -15,6 +25,8 @@ message PingRequest {}
 message PingResponse {
   string version = 1;
 }
+
+// Account types
 
 enum AccountType {
   ACCOUNT_TYPE_UNSPECIFIED = 0;
@@ -28,7 +40,7 @@ enum AccountType {
 }
 
 message Account {
-  int64 id = 1;
+  string id = 1;
   string name = 2;
   AccountType type = 3;
 }
@@ -46,4 +58,180 @@ message CreateAccountRequest {
 
 message CreateAccountResponse {
   Account account = 1;
+}
+
+message GetAccountHistoryRequest {
+  string account_id = 1;
+}
+
+message AccountEvent {
+  int64 id = 1;
+  string event_type = 2;
+  string payload = 3;
+  int64 recorded_at = 4;
+  int64 sequence = 5;
+}
+
+message GetAccountHistoryResponse {
+  repeated AccountEvent events = 1;
+}
+
+// Recurring rules
+
+enum Frequency {
+  FREQUENCY_UNSPECIFIED = 0;
+  FREQUENCY_WEEKLY = 1;
+  FREQUENCY_BIWEEKLY = 2;
+  FREQUENCY_SEMI_MONTHLY = 3;
+  FREQUENCY_MONTHLY = 4;
+  FREQUENCY_YEARLY = 5;
+}
+
+enum TransactionStatus {
+  TRANSACTION_STATUS_UNSPECIFIED = 0;
+  TRANSACTION_STATUS_PROJECTED = 1;
+  TRANSACTION_STATUS_SCHEDULED = 2;
+  TRANSACTION_STATUS_RECONCILED = 3;
+}
+
+message RecurringRule {
+  string id = 1;
+  string account_id = 2;
+  string name = 3;
+  int64 amount = 4;
+  Frequency frequency = 5;
+  string start_date = 6;
+  string end_date = 7;
+  int32 day_of_month = 8;
+  repeated int32 semi_monthly_days = 9;
+  bool is_transfer = 10;
+  string transfer_target_account_id = 11;
+  bool paused = 12;
+}
+
+message CreateRecurringRuleRequest {
+  string account_id = 1;
+  string name = 2;
+  int64 amount = 3;
+  Frequency frequency = 4;
+  string start_date = 5;
+  string end_date = 6;
+  int32 day_of_month = 7;
+  repeated int32 semi_monthly_days = 8;
+  bool is_transfer = 9;
+  string transfer_target_account_id = 10;
+}
+
+message CreateRecurringRuleResponse {
+  RecurringRule rule = 1;
+}
+
+message ListRecurringRulesRequest {
+  string account_id = 1;
+}
+
+message ListRecurringRulesResponse {
+  repeated RecurringRule rules = 1;
+}
+
+message UpdateRecurringRuleAmountRequest {
+  string rule_id = 1;
+  int64 new_amount = 2;
+  string effective_date = 3;
+  string reason = 4;
+}
+
+message UpdateRecurringRuleAmountResponse {}
+
+message GetRecurringRuleHistoryRequest {
+  string rule_id = 1;
+}
+
+message GetRecurringRuleHistoryResponse {
+  repeated AccountEvent events = 1;
+}
+
+// Transactions
+
+message Transaction {
+  string id = 1;
+  string account_id = 2;
+  string date = 3;
+  int64 amount = 4;
+  string name = 5;
+  string description = 6;
+  TransactionStatus status = 7;
+  string recurring_rule_id = 8;
+}
+
+message RecordTransactionRequest {
+  string account_id = 1;
+  string date = 2;
+  int64 amount = 3;
+  string name = 4;
+  string description = 5;
+  TransactionStatus status = 6;
+  string recurring_rule_id = 7;
+}
+
+message RecordTransactionResponse {
+  Transaction transaction = 1;
+}
+
+message UpdateTransactionStatusRequest {
+  string transaction_id = 1;
+  TransactionStatus new_status = 2;
+}
+
+message UpdateTransactionStatusResponse {}
+
+message CreateTransferRequest {
+  string source_account_id = 1;
+  string destination_account_id = 2;
+  int64 amount = 3;
+  string date = 4;
+  string name = 5;
+  string description = 6;
+  TransactionStatus status = 7;
+  string recurring_rule_id = 8;
+}
+
+message CreateTransferResponse {}
+
+// Projection
+
+message ProjectedTransaction {
+  string date = 1;
+  int64 amount = 2;
+  string name = 3;
+  string account_id = 4;
+  string recurring_rule_id = 5;
+  TransactionStatus status = 6;
+  bool is_projected = 7;
+}
+
+message DailyBalance {
+  string date = 1;
+  string account_id = 2;
+  int64 balance = 3;
+  repeated ProjectedTransaction transactions = 4;
+}
+
+message ProjectBalancesRequest {
+  string from_date = 1;
+  string to_date = 2;
+  repeated string account_ids = 3;
+}
+
+message ProjectBalancesResponse {
+  repeated DailyBalance balances = 1;
+}
+
+message ProjectBalanceOnDateRequest {
+  string date = 1;
+  string account_id = 2;
+}
+
+message ProjectBalanceOnDateResponse {
+  int64 balance = 1;
 }

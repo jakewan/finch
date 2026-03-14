@@ -2,6 +2,7 @@ package core_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/jakewan/finch/core"
@@ -16,8 +17,8 @@ func TestCreateAndListAccounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
 	}
-	if acct.ID == 0 {
-		t.Fatal("expected non-zero ID")
+	if acct.ID == "" {
+		t.Fatal("expected non-empty ID")
 	}
 	if acct.Name != "Checking" {
 		t.Fatalf("expected name Checking, got %s", acct.Name)
@@ -63,5 +64,50 @@ func TestCreateAccountValidation(t *testing.T) {
 	}
 	if _, err := db.CreateAccount(ctx, "Test", core.AccountType(99)); err == nil {
 		t.Fatal("expected error for invalid account type")
+	}
+}
+
+func TestCreateAccountStoresEvent(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	acct, err := db.CreateAccount(ctx, "Test Account", core.AccountTypeChecking)
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	events, err := db.GetAccountHistory(ctx, acct.ID)
+	if err != nil {
+		t.Fatalf("GetAccountHistory: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	if events[0].EventType != "AccountCreated" {
+		t.Fatalf("expected AccountCreated, got %s", events[0].EventType)
+	}
+
+	var payload core.AccountCreatedPayload
+	if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.Name != "Test Account" {
+		t.Fatalf("expected name Test Account in payload, got %s", payload.Name)
+	}
+	if payload.Type != int(core.AccountTypeChecking) {
+		t.Fatalf("expected type %d in payload, got %d", core.AccountTypeChecking, payload.Type)
+	}
+}
+
+func TestGetAccountHistoryEmpty(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	events, err := db.GetAccountHistory(ctx, "nonexistent-id")
+	if err != nil {
+		t.Fatalf("GetAccountHistory: %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("expected 0 events, got %d", len(events))
 	}
 }

@@ -77,6 +77,9 @@ func TestCreateAndListAccountsViaGRPC(t *testing.T) {
 	if createResp.Account.Name != "Test Checking" {
 		t.Fatalf("expected name Test Checking, got %s", createResp.Account.Name)
 	}
+	if createResp.Account.Id == "" {
+		t.Fatal("expected non-empty account ID")
+	}
 
 	listResp, err := client.ListAccounts(ctx, &finchv1.ListAccountsRequest{})
 	if err != nil {
@@ -84,5 +87,115 @@ func TestCreateAndListAccountsViaGRPC(t *testing.T) {
 	}
 	if len(listResp.Accounts) != 1 {
 		t.Fatalf("expected 1 account, got %d", len(listResp.Accounts))
+	}
+}
+
+func TestGetAccountHistoryViaGRPC(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+
+	createResp, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
+		Name: "History Test",
+		Type: finchv1.AccountType_ACCOUNT_TYPE_SAVINGS,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	histResp, err := client.GetAccountHistory(ctx, &finchv1.GetAccountHistoryRequest{
+		AccountId: createResp.Account.Id,
+	})
+	if err != nil {
+		t.Fatalf("GetAccountHistory: %v", err)
+	}
+	if len(histResp.Events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(histResp.Events))
+	}
+	if histResp.Events[0].EventType != "AccountCreated" {
+		t.Fatalf("expected AccountCreated, got %s", histResp.Events[0].EventType)
+	}
+}
+
+func TestProjectBalancesViaGRPC(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+
+	// Create account and opening balance.
+	acctResp, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
+		Name: "Projection Test",
+		Type: finchv1.AccountType_ACCOUNT_TYPE_CHECKING,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	_, err = client.RecordTransaction(ctx, &finchv1.RecordTransactionRequest{
+		AccountId: acctResp.Account.Id,
+		Date:      "2025-01-01",
+		Amount:    500000,
+		Name:      "Opening Balance",
+		Status:    finchv1.TransactionStatus_TRANSACTION_STATUS_RECONCILED,
+	})
+	if err != nil {
+		t.Fatalf("RecordTransaction: %v", err)
+	}
+
+	_, err = client.CreateRecurringRule(ctx, &finchv1.CreateRecurringRuleRequest{
+		AccountId:  acctResp.Account.Id,
+		Name:       "Rent",
+		Amount:     -150000,
+		Frequency:  finchv1.Frequency_FREQUENCY_MONTHLY,
+		StartDate:  "2025-01-01",
+		DayOfMonth: 1,
+	})
+	if err != nil {
+		t.Fatalf("CreateRecurringRule: %v", err)
+	}
+
+	projResp, err := client.ProjectBalances(ctx, &finchv1.ProjectBalancesRequest{
+		FromDate:   "2025-01-01",
+		ToDate:     "2025-03-31",
+		AccountIds: []string{acctResp.Account.Id},
+	})
+	if err != nil {
+		t.Fatalf("ProjectBalances: %v", err)
+	}
+	if len(projResp.Balances) == 0 {
+		t.Fatal("expected non-empty balances")
+	}
+}
+
+func TestProjectBalanceOnDateViaGRPC(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+
+	acctResp, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
+		Name: "Point Query Test",
+		Type: finchv1.AccountType_ACCOUNT_TYPE_CHECKING,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	_, err = client.RecordTransaction(ctx, &finchv1.RecordTransactionRequest{
+		AccountId: acctResp.Account.Id,
+		Date:      "2025-01-01",
+		Amount:    1000000,
+		Name:      "Opening",
+		Status:    finchv1.TransactionStatus_TRANSACTION_STATUS_RECONCILED,
+	})
+	if err != nil {
+		t.Fatalf("RecordTransaction: %v", err)
+	}
+
+	resp, err := client.ProjectBalanceOnDate(ctx, &finchv1.ProjectBalanceOnDateRequest{
+		Date:      "2025-01-15",
+		AccountId: acctResp.Account.Id,
+	})
+	if err != nil {
+		t.Fatalf("ProjectBalanceOnDate: %v", err)
+	}
+	if resp.Balance != 1000000 {
+		t.Fatalf("expected balance 1000000, got %d", resp.Balance)
 	}
 }
