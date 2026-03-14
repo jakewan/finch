@@ -1,4 +1,4 @@
-package main
+package finchd
 
 import (
 	"context"
@@ -11,18 +11,25 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const version = "0.1.0"
+// Version is the daemon version reported by the Ping RPC.
+const Version = "0.1.0"
 
-type finchServer struct {
+// Server implements the FinchService gRPC interface.
+type Server struct {
 	finchv1.UnimplementedFinchServiceServer
 	db *core.DB
 }
 
-func (s *finchServer) Ping(_ context.Context, _ *finchv1.PingRequest) (*finchv1.PingResponse, error) {
-	return &finchv1.PingResponse{Version: version}, nil
+// NewServer returns a FinchServiceServer backed by the given database.
+func NewServer(db *core.DB) finchv1.FinchServiceServer {
+	return &Server{db: db}
 }
 
-func (s *finchServer) ListAccounts(ctx context.Context, _ *finchv1.ListAccountsRequest) (*finchv1.ListAccountsResponse, error) {
+func (s *Server) Ping(_ context.Context, _ *finchv1.PingRequest) (*finchv1.PingResponse, error) {
+	return &finchv1.PingResponse{Version: Version}, nil
+}
+
+func (s *Server) ListAccounts(ctx context.Context, _ *finchv1.ListAccountsRequest) (*finchv1.ListAccountsResponse, error) {
 	accounts, err := s.db.ListAccounts(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list accounts: %v", err)
@@ -38,7 +45,7 @@ func (s *finchServer) ListAccounts(ctx context.Context, _ *finchv1.ListAccountsR
 	return resp, nil
 }
 
-func (s *finchServer) CreateAccount(ctx context.Context, req *finchv1.CreateAccountRequest) (*finchv1.CreateAccountResponse, error) {
+func (s *Server) CreateAccount(ctx context.Context, req *finchv1.CreateAccountRequest) (*finchv1.CreateAccountResponse, error) {
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, status.Error(codes.InvalidArgument, "account name must not be empty")
 	}
@@ -58,7 +65,7 @@ func (s *finchServer) CreateAccount(ctx context.Context, req *finchv1.CreateAcco
 	}, nil
 }
 
-func (s *finchServer) GetAccountHistory(ctx context.Context, req *finchv1.GetAccountHistoryRequest) (*finchv1.GetAccountHistoryResponse, error) {
+func (s *Server) GetAccountHistory(ctx context.Context, req *finchv1.GetAccountHistoryRequest) (*finchv1.GetAccountHistoryResponse, error) {
 	if strings.TrimSpace(req.AccountId) == "" {
 		return nil, status.Error(codes.InvalidArgument, "account_id must not be empty")
 	}
@@ -69,7 +76,7 @@ func (s *finchServer) GetAccountHistory(ctx context.Context, req *finchv1.GetAcc
 	return eventsToProto(events), nil
 }
 
-func (s *finchServer) CreateRecurringRule(ctx context.Context, req *finchv1.CreateRecurringRuleRequest) (*finchv1.CreateRecurringRuleResponse, error) {
+func (s *Server) CreateRecurringRule(ctx context.Context, req *finchv1.CreateRecurringRuleRequest) (*finchv1.CreateRecurringRuleResponse, error) {
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, status.Error(codes.InvalidArgument, "name must not be empty")
 	}
@@ -118,7 +125,7 @@ func (s *finchServer) CreateRecurringRule(ctx context.Context, req *finchv1.Crea
 	}, nil
 }
 
-func (s *finchServer) ListRecurringRules(ctx context.Context, req *finchv1.ListRecurringRulesRequest) (*finchv1.ListRecurringRulesResponse, error) {
+func (s *Server) ListRecurringRules(ctx context.Context, req *finchv1.ListRecurringRulesRequest) (*finchv1.ListRecurringRulesResponse, error) {
 	rules, err := s.db.ListRecurringRules(ctx, req.AccountId)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list recurring rules: %v", err)
@@ -130,7 +137,7 @@ func (s *finchServer) ListRecurringRules(ctx context.Context, req *finchv1.ListR
 	return resp, nil
 }
 
-func (s *finchServer) UpdateRecurringRuleAmount(ctx context.Context, req *finchv1.UpdateRecurringRuleAmountRequest) (*finchv1.UpdateRecurringRuleAmountResponse, error) {
+func (s *Server) UpdateRecurringRuleAmount(ctx context.Context, req *finchv1.UpdateRecurringRuleAmountRequest) (*finchv1.UpdateRecurringRuleAmountResponse, error) {
 	if req.RuleId == "" {
 		return nil, status.Error(codes.InvalidArgument, "rule_id must not be empty")
 	}
@@ -144,7 +151,7 @@ func (s *finchServer) UpdateRecurringRuleAmount(ctx context.Context, req *finchv
 	return &finchv1.UpdateRecurringRuleAmountResponse{}, nil
 }
 
-func (s *finchServer) GetRecurringRuleHistory(ctx context.Context, req *finchv1.GetRecurringRuleHistoryRequest) (*finchv1.GetRecurringRuleHistoryResponse, error) {
+func (s *Server) GetRecurringRuleHistory(ctx context.Context, req *finchv1.GetRecurringRuleHistoryRequest) (*finchv1.GetRecurringRuleHistoryResponse, error) {
 	if req.RuleId == "" {
 		return nil, status.Error(codes.InvalidArgument, "rule_id must not be empty")
 	}
@@ -156,7 +163,7 @@ func (s *finchServer) GetRecurringRuleHistory(ctx context.Context, req *finchv1.
 	return &finchv1.GetRecurringRuleHistoryResponse{Events: proto.Events}, nil
 }
 
-func (s *finchServer) RecordTransaction(ctx context.Context, req *finchv1.RecordTransactionRequest) (*finchv1.RecordTransactionResponse, error) {
+func (s *Server) RecordTransaction(ctx context.Context, req *finchv1.RecordTransactionRequest) (*finchv1.RecordTransactionResponse, error) {
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, status.Error(codes.InvalidArgument, "name must not be empty")
 	}
@@ -189,7 +196,7 @@ func (s *finchServer) RecordTransaction(ctx context.Context, req *finchv1.Record
 	}, nil
 }
 
-func (s *finchServer) UpdateTransactionStatus(ctx context.Context, req *finchv1.UpdateTransactionStatusRequest) (*finchv1.UpdateTransactionStatusResponse, error) {
+func (s *Server) UpdateTransactionStatus(ctx context.Context, req *finchv1.UpdateTransactionStatusRequest) (*finchv1.UpdateTransactionStatusResponse, error) {
 	if req.TransactionId == "" {
 		return nil, status.Error(codes.InvalidArgument, "transaction_id must not be empty")
 	}
@@ -202,7 +209,7 @@ func (s *finchServer) UpdateTransactionStatus(ctx context.Context, req *finchv1.
 	return &finchv1.UpdateTransactionStatusResponse{}, nil
 }
 
-func (s *finchServer) CreateTransfer(ctx context.Context, req *finchv1.CreateTransferRequest) (*finchv1.CreateTransferResponse, error) {
+func (s *Server) CreateTransfer(ctx context.Context, req *finchv1.CreateTransferRequest) (*finchv1.CreateTransferResponse, error) {
 	if req.SourceAccountId == "" || req.DestinationAccountId == "" {
 		return nil, status.Error(codes.InvalidArgument, "both source and destination account_id must be provided")
 	}
@@ -232,7 +239,7 @@ func (s *finchServer) CreateTransfer(ctx context.Context, req *finchv1.CreateTra
 	return &finchv1.CreateTransferResponse{}, nil
 }
 
-func (s *finchServer) ProjectBalances(ctx context.Context, req *finchv1.ProjectBalancesRequest) (*finchv1.ProjectBalancesResponse, error) {
+func (s *Server) ProjectBalances(ctx context.Context, req *finchv1.ProjectBalancesRequest) (*finchv1.ProjectBalancesResponse, error) {
 	fromDate, err := time.Parse(time.DateOnly, req.FromDate)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid from_date: %v", err)
@@ -270,7 +277,7 @@ func (s *finchServer) ProjectBalances(ctx context.Context, req *finchv1.ProjectB
 	return resp, nil
 }
 
-func (s *finchServer) ProjectBalanceOnDate(ctx context.Context, req *finchv1.ProjectBalanceOnDateRequest) (*finchv1.ProjectBalanceOnDateResponse, error) {
+func (s *Server) ProjectBalanceOnDate(ctx context.Context, req *finchv1.ProjectBalanceOnDateRequest) (*finchv1.ProjectBalanceOnDateResponse, error) {
 	if req.AccountId == "" {
 		return nil, status.Error(codes.InvalidArgument, "account_id must not be empty")
 	}
@@ -284,6 +291,71 @@ func (s *finchServer) ProjectBalanceOnDate(ctx context.Context, req *finchv1.Pro
 		return nil, status.Errorf(codes.Internal, "project balance on date: %v", err)
 	}
 	return &finchv1.ProjectBalanceOnDateResponse{Balance: balance}, nil
+}
+
+func (s *Server) GetMonthlyCashFlow(ctx context.Context, req *finchv1.GetMonthlyCashFlowRequest) (*finchv1.GetMonthlyCashFlowResponse, error) {
+	if req.FromMonth == "" || req.ToMonth == "" {
+		return nil, status.Error(codes.InvalidArgument, "from_month and to_month must not be empty")
+	}
+	if _, err := time.Parse("2006-01", req.FromMonth); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid from_month %q: expected YYYY-MM format", req.FromMonth)
+	}
+	if _, err := time.Parse("2006-01", req.ToMonth); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid to_month %q: expected YYYY-MM format", req.ToMonth)
+	}
+	months, err := s.db.GetMonthlyCashFlow(ctx, req.FromMonth, req.ToMonth, req.AccountIds)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get monthly cash flow: %v", err)
+	}
+	resp := &finchv1.GetMonthlyCashFlowResponse{}
+	for _, m := range months {
+		resp.Months = append(resp.Months, &finchv1.MonthlyCashFlow{
+			Month:    m.Month,
+			Income:   m.Income,
+			Expenses: m.Expenses,
+			Net:      m.Net,
+		})
+	}
+	return resp, nil
+}
+
+func (s *Server) GetBalanceTimeSeries(ctx context.Context, req *finchv1.GetBalanceTimeSeriesRequest) (*finchv1.GetBalanceTimeSeriesResponse, error) {
+	fromDate, err := time.Parse(time.DateOnly, req.FromDate)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid from_date: %v", err)
+	}
+	toDate, err := time.Parse(time.DateOnly, req.ToDate)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid to_date: %v", err)
+	}
+	switch req.Interval {
+	case finchv1.TimeSeriesInterval_TIME_SERIES_INTERVAL_DAILY,
+		finchv1.TimeSeriesInterval_TIME_SERIES_INTERVAL_WEEKLY,
+		finchv1.TimeSeriesInterval_TIME_SERIES_INTERVAL_MONTHLY:
+		// Valid.
+	default:
+		return nil, status.Error(codes.InvalidArgument, "interval must be DAILY, WEEKLY, or MONTHLY")
+	}
+
+	points, err := s.db.GetBalanceTimeSeries(ctx, fromDate, toDate, core.TimeSeriesInterval(req.Interval), req.AccountIds)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get balance time series: %v", err)
+	}
+
+	resp := &finchv1.GetBalanceTimeSeriesResponse{}
+	for _, p := range points {
+		tp := &finchv1.BalanceTimePoint{
+			Date: p.Date.Format(time.DateOnly),
+		}
+		for _, b := range p.Balances {
+			tp.Balances = append(tp.Balances, &finchv1.AccountBalance{
+				AccountId: b.AccountID,
+				Balance:   b.Balance,
+			})
+		}
+		resp.Points = append(resp.Points, tp)
+	}
+	return resp, nil
 }
 
 // Mapping helpers

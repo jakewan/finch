@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jakewan/finch/core"
+	"github.com/jakewan/finch/daemon/finchd"
 	finchv1 "github.com/jakewan/finch/daemon/gen/finch/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -29,7 +30,7 @@ func startTestServer(t *testing.T) finchv1.FinchServiceClient {
 	t.Cleanup(func() { _ = lis.Close() })
 
 	srv := grpc.NewServer()
-	finchv1.RegisterFinchServiceServer(srv, &finchServer{db: db})
+	finchv1.RegisterFinchServiceServer(srv, finchd.NewServer(db))
 	t.Cleanup(func() { srv.Stop() })
 
 	go func() {
@@ -58,8 +59,8 @@ func TestPing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Ping: %v", err)
 	}
-	if resp.Version != version {
-		t.Fatalf("expected version %s, got %s", version, resp.Version)
+	if resp.Version != finchd.Version {
+		t.Fatalf("expected version %s, got %s", finchd.Version, resp.Version)
 	}
 }
 
