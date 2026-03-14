@@ -293,6 +293,60 @@ func (s *Server) ProjectBalanceOnDate(ctx context.Context, req *finchv1.ProjectB
 	return &finchv1.ProjectBalanceOnDateResponse{Balance: balance}, nil
 }
 
+func (s *Server) GetMonthlyCashFlow(ctx context.Context, req *finchv1.GetMonthlyCashFlowRequest) (*finchv1.GetMonthlyCashFlowResponse, error) {
+	if req.FromMonth == "" || req.ToMonth == "" {
+		return nil, status.Error(codes.InvalidArgument, "from_month and to_month must not be empty")
+	}
+	months, err := s.db.GetMonthlyCashFlow(ctx, req.FromMonth, req.ToMonth, req.AccountIds)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get monthly cash flow: %v", err)
+	}
+	resp := &finchv1.GetMonthlyCashFlowResponse{}
+	for _, m := range months {
+		resp.Months = append(resp.Months, &finchv1.MonthlyCashFlow{
+			Month:    m.Month,
+			Income:   m.Income,
+			Expenses: m.Expenses,
+			Net:      m.Net,
+		})
+	}
+	return resp, nil
+}
+
+func (s *Server) GetBalanceTimeSeries(ctx context.Context, req *finchv1.GetBalanceTimeSeriesRequest) (*finchv1.GetBalanceTimeSeriesResponse, error) {
+	fromDate, err := time.Parse(time.DateOnly, req.FromDate)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid from_date: %v", err)
+	}
+	toDate, err := time.Parse(time.DateOnly, req.ToDate)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid to_date: %v", err)
+	}
+	if req.Interval == finchv1.TimeSeriesInterval_TIME_SERIES_INTERVAL_UNSPECIFIED {
+		return nil, status.Error(codes.InvalidArgument, "interval must be specified")
+	}
+
+	points, err := s.db.GetBalanceTimeSeries(ctx, fromDate, toDate, core.TimeSeriesInterval(req.Interval), req.AccountIds)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get balance time series: %v", err)
+	}
+
+	resp := &finchv1.GetBalanceTimeSeriesResponse{}
+	for _, p := range points {
+		tp := &finchv1.BalanceTimePoint{
+			Date: p.Date.Format(time.DateOnly),
+		}
+		for _, b := range p.Balances {
+			tp.Balances = append(tp.Balances, &finchv1.AccountBalance{
+				AccountId: b.AccountID,
+				Balance:   b.Balance,
+			})
+		}
+		resp.Points = append(resp.Points, tp)
+	}
+	return resp, nil
+}
+
 // Mapping helpers
 
 func eventsToProto(events []core.Event) *finchv1.GetAccountHistoryResponse {

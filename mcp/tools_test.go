@@ -804,6 +804,18 @@ func TestProjectionTools(t *testing.T) {
 		})
 	})
 
+	// Seed a one-off income transaction in Feb for aggregation tests later.
+	_, _, err = recHandler(ctx, nil, RecordTransactionInput{
+		AccountID: accountID,
+		Date:      "2025-02-15",
+		Amount:    200000,
+		Name:      "Bonus Income",
+		Status:    "RECONCILED",
+	})
+	if err != nil {
+		t.Fatalf("seed bonus income: %v", err)
+	}
+
 	t.Run("project_balance_on_date", func(t *testing.T) {
 		handler := newProjectBalanceOnDateHandler(client)
 
@@ -815,12 +827,12 @@ func TestProjectionTools(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// Opening 500000 - Jan rent 150000 - Feb rent 150000 - Mar rent 150000 = -50000
-			// But Jan 1 has both opening (500000) and rent (-150000), so Jan 1 balance = 350000
-			// Feb 1: 350000 - 150000 = 200000
-			// Mar 1: 200000 - 150000 = 50000
-			if out.Balance != 50000 {
-				t.Fatalf("expected balance 50000, got %d", out.Balance)
+			// Jan 1: opening 500000 + rent -150000 = 350000
+			// Feb 1: rent -150000 → 200000
+			// Feb 15: bonus +200000 → 400000
+			// Mar 1: rent -150000 → 250000
+			if out.Balance != 250000 {
+				t.Fatalf("expected balance 250000, got %d", out.Balance)
 			}
 		})
 
@@ -838,6 +850,305 @@ func TestProjectionTools(t *testing.T) {
 			}
 			if out.Balance != 0 {
 				t.Fatalf("expected balance 0 for empty account, got %d", out.Balance)
+			}
+		})
+	})
+}
+
+// --- Aggregation Tools ---
+
+func TestAggregationTools(t *testing.T) {
+	client := startTestBackend(t)
+	ctx := context.Background()
+	accountID := createTestAccount(t, client)
+
+	// Seed data: opening balance + recurring expense + one-off income.
+	recHandler := newRecordTransactionHandler(client)
+	_, _, err := recHandler(ctx, nil, RecordTransactionInput{
+		AccountID: accountID,
+		Date:      "2025-01-01",
+		Amount:    500000,
+		Name:      "Opening Balance",
+		Status:    "RECONCILED",
+	})
+	if err != nil {
+		t.Fatalf("seed opening balance: %v", err)
+	}
+
+	ruleHandler := newCreateRecurringRuleHandler(client)
+	_, _, err = ruleHandler(ctx, nil, CreateRecurringRuleInput{
+		AccountID:  accountID,
+		Name:       "Rent",
+		Amount:     -150000,
+		Frequency:  "MONTHLY",
+		StartDate:  "2025-01-01",
+		DayOfMonth: 1,
+	})
+	if err != nil {
+		t.Fatalf("seed recurring rule: %v", err)
+	}
+
+	_, _, err = recHandler(ctx, nil, RecordTransactionInput{
+		AccountID: accountID,
+		Date:      "2025-02-15",
+		Amount:    200000,
+		Name:      "Bonus Income",
+		Status:    "RECONCILED",
+	})
+	if err != nil {
+		t.Fatalf("seed bonus income: %v", err)
+	}
+
+	t.Run("get_monthly_cash_flow", func(t *testing.T) {
+		handler := newGetMonthlyCashFlowHandler(client)
+
+		t.Run("returns_monthly_income_and_expenses", func(t *testing.T) {
+			_, out, err := handler(ctx, nil, GetMonthlyCashFlowInput{
+				FromMonth:  "2025-01",
+				ToMonth:    "2025-03",
+				AccountIDs: []string{accountID},
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(out.Months) != 3 {
+				t.Fatalf("expected 3 months, got %d", len(out.Months))
+			}
+
+			// Jan: income=500000, expenses=-150000, net=350000
+			jan := out.Months[0]
+			if jan.Month != "2025-01" {
+				t.Fatalf("expected month 2025-01, got %q", jan.Month)
+			}
+			if jan.Income != 500000 {
+				t.Fatalf("jan income: expected 500000, got %d", jan.Income)
+			}
+			if jan.Expenses != -150000 {
+				t.Fatalf("jan expenses: expected -150000, got %d", jan.Expenses)
+			}
+			if jan.Net != 350000 {
+				t.Fatalf("jan net: expected 350000, got %d", jan.Net)
+			}
+
+			// Feb: income=200000, expenses=-150000, net=50000
+			feb := out.Months[1]
+			if feb.Income != 200000 {
+				t.Fatalf("feb income: expected 200000, got %d", feb.Income)
+			}
+			if feb.Expenses != -150000 {
+				t.Fatalf("feb expenses: expected -150000, got %d", feb.Expenses)
+			}
+
+			// Mar: income=0, expenses=-150000, net=-150000
+			mar := out.Months[2]
+			if mar.Income != 0 {
+				t.Fatalf("mar income: expected 0, got %d", mar.Income)
+			}
+			if mar.Expenses != -150000 {
+				t.Fatalf("mar expenses: expected -150000, got %d", mar.Expenses)
+			}
+		})
+
+		t.Run("handles_empty_date_range", func(t *testing.T) {
+			freshClient := startTestBackend(t)
+			emptyAcctID := createTestAccount(t, freshClient)
+			emptyHandler := newGetMonthlyCashFlowHandler(freshClient)
+
+			_, out, err := emptyHandler(ctx, nil, GetMonthlyCashFlowInput{
+				FromMonth:  "2025-06",
+				ToMonth:    "2025-08",
+				AccountIDs: []string{emptyAcctID},
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(out.Months) != 3 {
+				t.Fatalf("expected 3 months (zero-filled), got %d", len(out.Months))
+			}
+			for _, m := range out.Months {
+				if m.Income != 0 || m.Expenses != 0 || m.Net != 0 {
+					t.Fatalf("expected zero values for month %s, got income=%d expenses=%d net=%d", m.Month, m.Income, m.Expenses, m.Net)
+				}
+			}
+		})
+
+		t.Run("returns_continuous_months_with_zero_fills", func(t *testing.T) {
+			_, out, err := handler(ctx, nil, GetMonthlyCashFlowInput{
+				FromMonth:  "2025-01",
+				ToMonth:    "2025-06",
+				AccountIDs: []string{accountID},
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(out.Months) != 6 {
+				t.Fatalf("expected 6 continuous months, got %d", len(out.Months))
+			}
+			expectedMonths := []string{"2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06"}
+			for i, m := range out.Months {
+				if m.Month != expectedMonths[i] {
+					t.Fatalf("expected month %s at index %d, got %s", expectedMonths[i], i, m.Month)
+				}
+			}
+		})
+	})
+
+	t.Run("get_balance_time_series", func(t *testing.T) {
+		handler := newGetBalanceTimeSeriesHandler(client)
+
+		t.Run("returns_daily_balance_points", func(t *testing.T) {
+			_, out, err := handler(ctx, nil, GetBalanceTimeSeriesInput{
+				FromDate:   "2025-01-01",
+				ToDate:     "2025-01-07",
+				Interval:   "DAILY",
+				AccountIDs: []string{accountID},
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(out.Points) != 7 {
+				t.Fatalf("expected 7 daily points, got %d", len(out.Points))
+			}
+			// First point: Jan 1 has opening 500000 + rent -150000 = 350000
+			first := out.Points[0]
+			if first.Date != "2025-01-01" {
+				t.Fatalf("expected first date 2025-01-01, got %q", first.Date)
+			}
+			if len(first.Balances) != 1 {
+				t.Fatalf("expected 1 account balance, got %d", len(first.Balances))
+			}
+			if first.Balances[0].Balance != 350000 {
+				t.Fatalf("expected balance 350000 on Jan 1, got %d", first.Balances[0].Balance)
+			}
+		})
+
+		t.Run("returns_weekly_sampled_points", func(t *testing.T) {
+			_, out, err := handler(ctx, nil, GetBalanceTimeSeriesInput{
+				FromDate:   "2025-01-01",
+				ToDate:     "2025-01-28",
+				Interval:   "WEEKLY",
+				AccountIDs: []string{accountID},
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			// 4 weekly points: Jan 1, Jan 8, Jan 15, Jan 22
+			if len(out.Points) != 4 {
+				t.Fatalf("expected 4 weekly points, got %d", len(out.Points))
+			}
+			if out.Points[0].Date != "2025-01-01" {
+				t.Fatalf("expected first date 2025-01-01, got %q", out.Points[0].Date)
+			}
+			if out.Points[1].Date != "2025-01-08" {
+				t.Fatalf("expected second date 2025-01-08, got %q", out.Points[1].Date)
+			}
+		})
+
+		t.Run("returns_monthly_sampled_points", func(t *testing.T) {
+			_, out, err := handler(ctx, nil, GetBalanceTimeSeriesInput{
+				FromDate:   "2025-01-01",
+				ToDate:     "2025-03-01",
+				Interval:   "MONTHLY",
+				AccountIDs: []string{accountID},
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(out.Points) != 3 {
+				t.Fatalf("expected 3 monthly points, got %d", len(out.Points))
+			}
+			// Jan 1: 350000, Feb 1: 200000, Mar 1: 250000
+			if out.Points[0].Balances[0].Balance != 350000 {
+				t.Fatalf("expected Jan balance 350000, got %d", out.Points[0].Balances[0].Balance)
+			}
+			if out.Points[1].Balances[0].Balance != 200000 {
+				t.Fatalf("expected Feb balance 200000, got %d", out.Points[1].Balances[0].Balance)
+			}
+			if out.Points[2].Balances[0].Balance != 250000 {
+				t.Fatalf("expected Mar balance 250000, got %d", out.Points[2].Balances[0].Balance)
+			}
+		})
+
+		t.Run("includes_per_account_breakdown", func(t *testing.T) {
+			// Create a second account with its own transaction.
+			resp, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
+				Name: "Savings",
+				Type: finchv1.AccountType_ACCOUNT_TYPE_SAVINGS,
+			})
+			if err != nil {
+				t.Fatalf("create savings account: %v", err)
+			}
+			savingsID := resp.Account.Id
+
+			_, _, err = recHandler(ctx, nil, RecordTransactionInput{
+				AccountID: savingsID,
+				Date:      "2025-01-01",
+				Amount:    1000000,
+				Name:      "Savings Opening",
+				Status:    "RECONCILED",
+			})
+			if err != nil {
+				t.Fatalf("seed savings: %v", err)
+			}
+
+			_, out, err := handler(ctx, nil, GetBalanceTimeSeriesInput{
+				FromDate:   "2025-01-01",
+				ToDate:     "2025-01-01",
+				Interval:   "DAILY",
+				AccountIDs: []string{accountID, savingsID},
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(out.Points) != 1 {
+				t.Fatalf("expected 1 point, got %d", len(out.Points))
+			}
+			if len(out.Points[0].Balances) != 2 {
+				t.Fatalf("expected 2 account balances, got %d", len(out.Points[0].Balances))
+			}
+		})
+
+		t.Run("normalizes_interval_input", func(t *testing.T) {
+			cases := []struct {
+				name  string
+				input string
+			}{
+				{"lowercase", "daily"},
+				{"prefixed", "TIME_SERIES_INTERVAL_WEEKLY"},
+				{"with whitespace", "  MONTHLY  "},
+				{"mixed case prefixed", "time_series_interval_daily"},
+			}
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					_, _, err := handler(ctx, nil, GetBalanceTimeSeriesInput{
+						FromDate:   "2025-01-01",
+						ToDate:     "2025-01-01",
+						Interval:   tc.input,
+						AccountIDs: []string{accountID},
+					})
+					if err != nil {
+						t.Fatalf("input %q: unexpected error: %v", tc.input, err)
+					}
+				})
+			}
+		})
+
+		t.Run("rejects_unknown_interval", func(t *testing.T) {
+			_, _, err := handler(ctx, nil, GetBalanceTimeSeriesInput{
+				FromDate:   "2025-01-01",
+				ToDate:     "2025-01-31",
+				Interval:   "QUARTERLY",
+				AccountIDs: []string{accountID},
+			})
+			if err == nil {
+				t.Fatal("expected error for unknown interval")
+			}
+			errMsg := err.Error()
+			if !strings.Contains(errMsg, "unknown interval") {
+				t.Fatalf("expected 'unknown interval' in error, got: %s", errMsg)
+			}
+			if !strings.Contains(errMsg, "DAILY") {
+				t.Fatalf("expected valid options in error, got: %s", errMsg)
 			}
 		})
 	})

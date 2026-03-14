@@ -75,6 +75,16 @@ func registerTools(server *mcp.Server, client finchv1.FinchServiceClient) {
 		Name:        "project_balance_on_date",
 		Description: "Get the projected balance for a single account on a specific date.",
 	}, newProjectBalanceOnDateHandler(client))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_monthly_cash_flow",
+		Description: "Get income vs expenses per month over a date range (bar chart data). Amounts are in cents.",
+	}, newGetMonthlyCashFlowHandler(client))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_balance_time_series",
+		Description: "Get sampled account balances over time at daily, weekly, or monthly intervals (line chart data). Amounts are in cents.",
+	}, newGetBalanceTimeSeriesHandler(client))
 }
 
 // Ping
@@ -609,6 +619,118 @@ func newProjectBalanceOnDateHandler(client finchv1.FinchServiceClient) func(cont
 			return nil, ProjectBalanceOnDateOutput{}, fmt.Errorf("project balance on date: %w", err)
 		}
 		return nil, ProjectBalanceOnDateOutput{Balance: resp.Balance}, nil
+	}
+}
+
+// GetMonthlyCashFlow
+
+type GetMonthlyCashFlowInput struct {
+	FromMonth  string   `json:"from_month" jsonschema:"start month (YYYY-MM)"`
+	ToMonth    string   `json:"to_month" jsonschema:"end month (YYYY-MM)"`
+	AccountIDs []string `json:"account_ids,omitempty" jsonschema:"optional account UUIDs"`
+}
+
+type MonthlyCashFlowInfo struct {
+	Month    string `json:"month"`
+	Income   int64  `json:"income"`
+	Expenses int64  `json:"expenses"`
+	Net      int64  `json:"net"`
+}
+
+type GetMonthlyCashFlowOutput struct {
+	Months []MonthlyCashFlowInfo `json:"months"`
+}
+
+func newGetMonthlyCashFlowHandler(client finchv1.FinchServiceClient) func(context.Context, *mcp.CallToolRequest, GetMonthlyCashFlowInput) (*mcp.CallToolResult, GetMonthlyCashFlowOutput, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, input GetMonthlyCashFlowInput) (*mcp.CallToolResult, GetMonthlyCashFlowOutput, error) {
+		resp, err := client.GetMonthlyCashFlow(ctx, &finchv1.GetMonthlyCashFlowRequest{
+			FromMonth:  input.FromMonth,
+			ToMonth:    input.ToMonth,
+			AccountIds: input.AccountIDs,
+		})
+		if err != nil {
+			return nil, GetMonthlyCashFlowOutput{}, fmt.Errorf("get monthly cash flow: %w", err)
+		}
+		months := make([]MonthlyCashFlowInfo, len(resp.Months))
+		for i, m := range resp.Months {
+			months[i] = MonthlyCashFlowInfo{
+				Month:    m.Month,
+				Income:   m.Income,
+				Expenses: m.Expenses,
+				Net:      m.Net,
+			}
+		}
+		return nil, GetMonthlyCashFlowOutput{Months: months}, nil
+	}
+}
+
+// GetBalanceTimeSeries
+
+type GetBalanceTimeSeriesInput struct {
+	FromDate   string   `json:"from_date" jsonschema:"start date (YYYY-MM-DD)"`
+	ToDate     string   `json:"to_date" jsonschema:"end date (YYYY-MM-DD)"`
+	Interval   string   `json:"interval" jsonschema:"DAILY, WEEKLY, or MONTHLY"`
+	AccountIDs []string `json:"account_ids,omitempty" jsonschema:"optional account UUIDs"`
+}
+
+type AccountBalanceInfo struct {
+	AccountID string `json:"account_id"`
+	Balance   int64  `json:"balance"`
+}
+
+type BalanceTimePointInfo struct {
+	Date     string               `json:"date"`
+	Balances []AccountBalanceInfo `json:"balances"`
+}
+
+type GetBalanceTimeSeriesOutput struct {
+	Points []BalanceTimePointInfo `json:"points"`
+}
+
+var timeSeriesIntervalMap = map[string]finchv1.TimeSeriesInterval{
+	"DAILY":   finchv1.TimeSeriesInterval_TIME_SERIES_INTERVAL_DAILY,
+	"WEEKLY":  finchv1.TimeSeriesInterval_TIME_SERIES_INTERVAL_WEEKLY,
+	"MONTHLY": finchv1.TimeSeriesInterval_TIME_SERIES_INTERVAL_MONTHLY,
+}
+
+func newGetBalanceTimeSeriesHandler(client finchv1.FinchServiceClient) func(context.Context, *mcp.CallToolRequest, GetBalanceTimeSeriesInput) (*mcp.CallToolResult, GetBalanceTimeSeriesOutput, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, input GetBalanceTimeSeriesInput) (*mcp.CallToolResult, GetBalanceTimeSeriesOutput, error) {
+		normalized := strings.ToUpper(strings.TrimSpace(input.Interval))
+		normalized = strings.TrimPrefix(normalized, "TIME_SERIES_INTERVAL_")
+		interval, ok := timeSeriesIntervalMap[normalized]
+		if !ok {
+			valid := make([]string, 0, len(timeSeriesIntervalMap))
+			for k := range timeSeriesIntervalMap {
+				valid = append(valid, k)
+			}
+			slices.Sort(valid)
+			return nil, GetBalanceTimeSeriesOutput{}, fmt.Errorf("unknown interval %q; valid: %s", input.Interval, strings.Join(valid, ", "))
+		}
+
+		resp, err := client.GetBalanceTimeSeries(ctx, &finchv1.GetBalanceTimeSeriesRequest{
+			FromDate:   input.FromDate,
+			ToDate:     input.ToDate,
+			Interval:   interval,
+			AccountIds: input.AccountIDs,
+		})
+		if err != nil {
+			return nil, GetBalanceTimeSeriesOutput{}, fmt.Errorf("get balance time series: %w", err)
+		}
+		points := make([]BalanceTimePointInfo, len(resp.Points))
+		for i, p := range resp.Points {
+			balances := make([]AccountBalanceInfo, len(p.Balances))
+			for j, b := range p.Balances {
+				balances[j] = AccountBalanceInfo{
+					AccountID: b.AccountId,
+					Balance:   b.Balance,
+				}
+			}
+			points[i] = BalanceTimePointInfo{
+				Date:     p.Date,
+				Balances: balances,
+			}
+		}
+		return nil, GetBalanceTimeSeriesOutput{Points: points}, nil
 	}
 }
 

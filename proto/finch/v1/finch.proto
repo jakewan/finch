@@ -18,6 +18,8 @@ service FinchService {
   rpc CreateTransfer(CreateTransferRequest) returns (CreateTransferResponse);
   rpc ProjectBalances(ProjectBalancesRequest) returns (ProjectBalancesResponse);
   rpc ProjectBalanceOnDate(ProjectBalanceOnDateRequest) returns (ProjectBalanceOnDateResponse);
+  rpc GetMonthlyCashFlow(GetMonthlyCashFlowRequest) returns (GetMonthlyCashFlowResponse);
+  rpc GetBalanceTimeSeries(GetBalanceTimeSeriesRequest) returns (GetBalanceTimeSeriesResponse);
 }
 
 message PingRequest {}
@@ -234,4 +236,51 @@ message ProjectBalanceOnDateRequest {
 
 message ProjectBalanceOnDateResponse {
   int64 balance = 1;
+}
+
+// Aggregation
+
+enum TimeSeriesInterval {
+  TIME_SERIES_INTERVAL_UNSPECIFIED = 0;
+  TIME_SERIES_INTERVAL_DAILY = 1;
+  TIME_SERIES_INTERVAL_WEEKLY = 2;
+  TIME_SERIES_INTERVAL_MONTHLY = 3;
+}
+
+message GetMonthlyCashFlowRequest {
+  string from_month = 1;
+  string to_month = 2;
+  repeated string account_ids = 3;
+}
+
+message MonthlyCashFlow {
+  string month = 1;
+  int64 income = 2;
+  int64 expenses = 3;
+  int64 net = 4;
+}
+
+message GetMonthlyCashFlowResponse {
+  repeated MonthlyCashFlow months = 1;
+}
+
+message GetBalanceTimeSeriesRequest {
+  string from_date = 1;
+  string to_date = 2;
+  TimeSeriesInterval interval = 3;
+  repeated string account_ids = 4;
+}
+
+message AccountBalance {
+  string account_id = 1;
+  int64 balance = 2;
+}
+
+message BalanceTimePoint {
+  string date = 1;
+  repeated AccountBalance balances = 2;
+}
+
+message GetBalanceTimeSeriesResponse {
+  repeated BalanceTimePoint points = 1;
 }
