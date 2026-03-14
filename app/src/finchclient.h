@@ -26,6 +26,7 @@ public:
     Q_ENUM(ConnectionState)
 
     explicit FinchClient(const QString& socketPath, QObject* parent = nullptr);
+    ~FinchClient() override;
 
     QString daemonVersion() const { return m_version; }
     ConnectionState connectionState() const { return m_connectionState; }

@@ -18,6 +18,13 @@ FinchClient::FinchClient(const QString& socketPath, QObject* parent)
             this, &FinchClient::onPingFinished);
 }
 
+FinchClient::~FinchClient()
+{
+    // Wait for in-flight ping to complete before destroying the stub.
+    // Bounded by the 3-second gRPC deadline.
+    m_pingWatcher.waitForFinished();
+}
+
 void FinchClient::ping()
 {
     if (m_pingInProgress)
