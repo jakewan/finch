@@ -297,6 +297,12 @@ func (s *Server) GetMonthlyCashFlow(ctx context.Context, req *finchv1.GetMonthly
 	if req.FromMonth == "" || req.ToMonth == "" {
 		return nil, status.Error(codes.InvalidArgument, "from_month and to_month must not be empty")
 	}
+	if _, err := time.Parse("2006-01", req.FromMonth); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid from_month %q: expected YYYY-MM format", req.FromMonth)
+	}
+	if _, err := time.Parse("2006-01", req.ToMonth); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid to_month %q: expected YYYY-MM format", req.ToMonth)
+	}
 	months, err := s.db.GetMonthlyCashFlow(ctx, req.FromMonth, req.ToMonth, req.AccountIds)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "get monthly cash flow: %v", err)
@@ -322,8 +328,13 @@ func (s *Server) GetBalanceTimeSeries(ctx context.Context, req *finchv1.GetBalan
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid to_date: %v", err)
 	}
-	if req.Interval == finchv1.TimeSeriesInterval_TIME_SERIES_INTERVAL_UNSPECIFIED {
-		return nil, status.Error(codes.InvalidArgument, "interval must be specified")
+	switch req.Interval {
+	case finchv1.TimeSeriesInterval_TIME_SERIES_INTERVAL_DAILY,
+		finchv1.TimeSeriesInterval_TIME_SERIES_INTERVAL_WEEKLY,
+		finchv1.TimeSeriesInterval_TIME_SERIES_INTERVAL_MONTHLY:
+		// Valid.
+	default:
+		return nil, status.Error(codes.InvalidArgument, "interval must be DAILY, WEEKLY, or MONTHLY")
 	}
 
 	points, err := s.db.GetBalanceTimeSeries(ctx, fromDate, toDate, core.TimeSeriesInterval(req.Interval), req.AccountIds)

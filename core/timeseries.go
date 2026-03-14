@@ -65,27 +65,45 @@ func (db *DB) GetBalanceTimeSeries(ctx context.Context, from, to time.Time, inte
 		return nil, fmt.Errorf("project balances: %w", err)
 	}
 
-	// Build a map: accountID → date → balance (cumulative end-of-day).
-	// We track the running balance per account across the daily data.
-	acctBalanceOnDate := make(map[string]map[string]int64) // accountID → dateStr → balance
+	// Build sorted known dates per account for efficient sampling.
+	acctBalanceOnDate := make(map[string]map[string]int64)
 	for _, id := range resolvedIDs {
 		acctBalanceOnDate[id] = make(map[string]int64)
 	}
-	for _, db := range dailyBalances {
-		dateKey := db.Date.Format(time.DateOnly)
-		acctBalanceOnDate[db.AccountID][dateKey] = db.Balance
+	for _, daily := range dailyBalances {
+		dateKey := daily.Date.Format(time.DateOnly)
+		acctBalanceOnDate[daily.AccountID][dateKey] = daily.Balance
+	}
+
+	// Build sorted date lists per account for linear sampling.
+	acctSortedDates := make(map[string][]string)
+	for id, dateMap := range acctBalanceOnDate {
+		dates := make([]string, 0, len(dateMap))
+		for d := range dateMap {
+			dates = append(dates, d)
+		}
+		sort.Strings(dates)
+		acctSortedDates[id] = dates
 	}
 
 	// Generate sample dates.
-	sampleDates := generateSampleDates(from, to, interval)
+	sampleDates, err := generateSampleDates(from, to, interval)
+	if err != nil {
+		return nil, err
+	}
 
-	// For each sample date, find the most recent known balance for each account.
+	// Track last-known-balance cursors per account for linear sampling.
+	acctCursors := make(map[string]int)
+	for _, id := range resolvedIDs {
+		acctCursors[id] = 0
+	}
+
 	result := make([]BalanceTimePoint, len(sampleDates))
 	for i, sampleDate := range sampleDates {
-		dateKey := sampleDate.Format(time.DateOnly)
+		sampleKey := sampleDate.Format(time.DateOnly)
 		point := BalanceTimePoint{Date: sampleDate}
 		for _, id := range resolvedIDs {
-			bal := lookupBalance(acctBalanceOnDate[id], startBalances[id], from, sampleDate, dateKey)
+			bal := sampleBalance(acctBalanceOnDate[id], acctSortedDates[id], &acctCursors, id, sampleKey, startBalances[id])
 			point.Balances = append(point.Balances, AccountBalance{
 				AccountID: id,
 				Balance:   bal,
@@ -97,26 +115,23 @@ func (db *DB) GetBalanceTimeSeries(ctx context.Context, from, to time.Time, inte
 	return result, nil
 }
 
-// lookupBalance finds the most recent known balance on or before sampleDate.
-func lookupBalance(dateMap map[string]int64, startBalance int64, from, sampleDate time.Time, sampleKey string) int64 {
-	// Check exact date first.
-	if bal, ok := dateMap[sampleKey]; ok {
-		return bal
+// sampleBalance finds the most recent known balance on or before sampleKey
+// by advancing a cursor through sorted known dates. O(1) amortized per sample.
+func sampleBalance(dateMap map[string]int64, sortedDates []string, cursors *map[string]int, id, sampleKey string, startBalance int64) int64 {
+	cursor := (*cursors)[id]
+	// Advance cursor to the last known date <= sampleKey.
+	for cursor < len(sortedDates) && sortedDates[cursor] <= sampleKey {
+		cursor++
 	}
-	// Walk backward from sampleDate to from looking for the last known balance.
-	cursor := sampleDate.AddDate(0, 0, -1)
-	for !cursor.Before(from) {
-		key := cursor.Format(time.DateOnly)
-		if bal, ok := dateMap[key]; ok {
-			return bal
-		}
-		cursor = cursor.AddDate(0, 0, -1)
+	(*cursors)[id] = cursor
+
+	if cursor > 0 {
+		return dateMap[sortedDates[cursor-1]]
 	}
-	// No daily data found in range — use starting balance.
 	return startBalance
 }
 
-func generateSampleDates(from, to time.Time, interval TimeSeriesInterval) []time.Time {
+func generateSampleDates(from, to time.Time, interval TimeSeriesInterval) ([]time.Time, error) {
 	var dates []time.Time
 	cursor := from
 	for !cursor.After(to) {
@@ -128,10 +143,9 @@ func generateSampleDates(from, to time.Time, interval TimeSeriesInterval) []time
 			cursor = cursor.AddDate(0, 0, 7)
 		case TimeSeriesMonthly:
 			cursor = cursor.AddDate(0, 1, 0)
+		default:
+			return nil, fmt.Errorf("unsupported interval: %d", interval)
 		}
 	}
-	sort.Slice(dates, func(i, j int) bool {
-		return dates[i].Before(dates[j])
-	})
-	return dates
+	return dates, nil
 }
