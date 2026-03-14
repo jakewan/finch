@@ -65,6 +65,16 @@ func registerTools(server *mcp.Server, client finchv1.FinchServiceClient) {
 		Name:        "create_transfer",
 		Description: "Create a transfer between two accounts. Amount is in cents (positive, will be negated for source).",
 	}, newCreateTransferHandler(client))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "project_balances",
+		Description: "Project account balances over a date range, merging recurring rules with recorded transactions.",
+	}, newProjectBalancesHandler(client))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "project_balance_on_date",
+		Description: "Get the projected balance for a single account on a specific date.",
+	}, newProjectBalanceOnDateHandler(client))
 }
 
 // Ping
@@ -512,6 +522,93 @@ func protoRuleToInfo(r *finchv1.RecurringRule) RecurringRuleInfo {
 		IsTransfer:             r.IsTransfer,
 		TransferTargetAccountID: r.TransferTargetAccountId,
 		Paused:                 r.Paused,
+	}
+}
+
+// ProjectBalances
+
+type ProjectBalancesInput struct {
+	FromDate   string   `json:"from_date" jsonschema:"start date (YYYY-MM-DD)"`
+	ToDate     string   `json:"to_date" jsonschema:"end date (YYYY-MM-DD)"`
+	AccountIDs []string `json:"account_ids,omitempty" jsonschema:"optional list of account UUIDs to project (all if empty)"`
+}
+
+type ProjectedTransactionInfo struct {
+	Date            string `json:"date"`
+	Amount          int64  `json:"amount"`
+	Name            string `json:"name"`
+	AccountID       string `json:"account_id"`
+	RecurringRuleID string `json:"recurring_rule_id,omitempty"`
+	Status          string `json:"status"`
+	IsProjected     bool   `json:"is_projected"`
+}
+
+type DailyBalanceInfo struct {
+	Date         string                     `json:"date"`
+	AccountID    string                     `json:"account_id"`
+	Balance      int64                      `json:"balance"`
+	Transactions []ProjectedTransactionInfo `json:"transactions"`
+}
+
+type ProjectBalancesOutput struct {
+	Balances []DailyBalanceInfo `json:"balances"`
+}
+
+func newProjectBalancesHandler(client finchv1.FinchServiceClient) func(context.Context, *mcp.CallToolRequest, ProjectBalancesInput) (*mcp.CallToolResult, ProjectBalancesOutput, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectBalancesInput) (*mcp.CallToolResult, ProjectBalancesOutput, error) {
+		resp, err := client.ProjectBalances(ctx, &finchv1.ProjectBalancesRequest{
+			FromDate:   input.FromDate,
+			ToDate:     input.ToDate,
+			AccountIds: input.AccountIDs,
+		})
+		if err != nil {
+			return nil, ProjectBalancesOutput{}, fmt.Errorf("project balances: %w", err)
+		}
+		balances := make([]DailyBalanceInfo, len(resp.Balances))
+		for i, b := range resp.Balances {
+			txns := make([]ProjectedTransactionInfo, len(b.Transactions))
+			for j, t := range b.Transactions {
+				txns[j] = ProjectedTransactionInfo{
+					Date:            t.Date,
+					Amount:          t.Amount,
+					Name:            t.Name,
+					AccountID:       t.AccountId,
+					RecurringRuleID: t.RecurringRuleId,
+					Status:          t.Status.String(),
+					IsProjected:     t.IsProjected,
+				}
+			}
+			balances[i] = DailyBalanceInfo{
+				Date:         b.Date,
+				AccountID:    b.AccountId,
+				Balance:      b.Balance,
+				Transactions: txns,
+			}
+		}
+		return nil, ProjectBalancesOutput{Balances: balances}, nil
+	}
+}
+
+// ProjectBalanceOnDate
+
+type ProjectBalanceOnDateInput struct {
+	Date      string `json:"date" jsonschema:"target date (YYYY-MM-DD)"`
+	AccountID string `json:"account_id" jsonschema:"UUID of the account"`
+}
+type ProjectBalanceOnDateOutput struct {
+	Balance int64 `json:"balance"`
+}
+
+func newProjectBalanceOnDateHandler(client finchv1.FinchServiceClient) func(context.Context, *mcp.CallToolRequest, ProjectBalanceOnDateInput) (*mcp.CallToolResult, ProjectBalanceOnDateOutput, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectBalanceOnDateInput) (*mcp.CallToolResult, ProjectBalanceOnDateOutput, error) {
+		resp, err := client.ProjectBalanceOnDate(ctx, &finchv1.ProjectBalanceOnDateRequest{
+			Date:      input.Date,
+			AccountId: input.AccountID,
+		})
+		if err != nil {
+			return nil, ProjectBalanceOnDateOutput{}, fmt.Errorf("project balance on date: %w", err)
+		}
+		return nil, ProjectBalanceOnDateOutput{Balance: resp.Balance}, nil
 	}
 }
 

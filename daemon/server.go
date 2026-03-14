@@ -223,6 +223,60 @@ func (s *finchServer) CreateTransfer(ctx context.Context, req *finchv1.CreateTra
 	return &finchv1.CreateTransferResponse{}, nil
 }
 
+func (s *finchServer) ProjectBalances(ctx context.Context, req *finchv1.ProjectBalancesRequest) (*finchv1.ProjectBalancesResponse, error) {
+	fromDate, err := time.Parse(time.DateOnly, req.FromDate)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid from_date: %v", err)
+	}
+	toDate, err := time.Parse(time.DateOnly, req.ToDate)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid to_date: %v", err)
+	}
+
+	balances, err := s.db.ProjectBalances(ctx, fromDate, toDate, req.AccountIds)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "project balances: %v", err)
+	}
+
+	resp := &finchv1.ProjectBalancesResponse{}
+	for _, b := range balances {
+		pb := &finchv1.DailyBalance{
+			Date:      b.Date.Format(time.DateOnly),
+			AccountId: b.AccountID,
+			Balance:   b.Balance,
+		}
+		for _, t := range b.Transactions {
+			pb.Transactions = append(pb.Transactions, &finchv1.ProjectedTransaction{
+				Date:            t.Date.Format(time.DateOnly),
+				Amount:          t.Amount,
+				Name:            t.Name,
+				AccountId:       t.AccountID,
+				RecurringRuleId: t.RecurringRuleID,
+				Status:          finchv1.TransactionStatus(t.Status),
+				IsProjected:     t.IsProjected,
+			})
+		}
+		resp.Balances = append(resp.Balances, pb)
+	}
+	return resp, nil
+}
+
+func (s *finchServer) ProjectBalanceOnDate(ctx context.Context, req *finchv1.ProjectBalanceOnDateRequest) (*finchv1.ProjectBalanceOnDateResponse, error) {
+	if req.AccountId == "" {
+		return nil, status.Error(codes.InvalidArgument, "account_id must not be empty")
+	}
+	targetDate, err := time.Parse(time.DateOnly, req.Date)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid date: %v", err)
+	}
+
+	balance, err := s.db.ProjectBalanceOnDate(ctx, targetDate, req.AccountId)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "project balance on date: %v", err)
+	}
+	return &finchv1.ProjectBalanceOnDateResponse{Balance: balance}, nil
+}
+
 // Mapping helpers
 
 func eventsToProto(events []core.Event) *finchv1.GetAccountHistoryResponse {

@@ -16,6 +16,8 @@ service FinchService {
   rpc RecordTransaction(RecordTransactionRequest) returns (RecordTransactionResponse);
   rpc UpdateTransactionStatus(UpdateTransactionStatusRequest) returns (UpdateTransactionStatusResponse);
   rpc CreateTransfer(CreateTransferRequest) returns (CreateTransferResponse);
+  rpc ProjectBalances(ProjectBalancesRequest) returns (ProjectBalancesResponse);
+  rpc ProjectBalanceOnDate(ProjectBalanceOnDateRequest) returns (ProjectBalanceOnDateResponse);
 }
 
 message PingRequest {}
@@ -195,3 +197,41 @@ message CreateTransferRequest {
 }
 
 message CreateTransferResponse {}
+
+// Projection
+
+message ProjectedTransaction {
+  string date = 1;
+  int64 amount = 2;
+  string name = 3;
+  string account_id = 4;
+  string recurring_rule_id = 5;
+  TransactionStatus status = 6;
+  bool is_projected = 7;
+}
+
+message DailyBalance {
+  string date = 1;
+  string account_id = 2;
+  int64 balance = 3;
+  repeated ProjectedTransaction transactions = 4;
+}
+
+message ProjectBalancesRequest {
+  string from_date = 1;
+  string to_date = 2;
+  repeated string account_ids = 3;
+}
+
+message ProjectBalancesResponse {
+  repeated DailyBalance balances = 1;
+}
+
+message ProjectBalanceOnDateRequest {
+  string date = 1;
+  string account_id = 2;
+}
+
+message ProjectBalanceOnDateResponse {
+  int64 balance = 1;
+}
