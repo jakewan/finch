@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import Finch 1.0
 
 ApplicationWindow {
     visible: true
@@ -18,15 +19,32 @@ ApplicationWindow {
         }
 
         Label {
-            text: finchClient.daemonVersion
-                ? "Connected to daemon v" + finchClient.daemonVersion
-                : "Not connected to daemon"
+            text: {
+                switch (finchClient.connectionState) {
+                case FinchClient.Connecting:
+                    return "Connecting to daemon…"
+                case FinchClient.Connected:
+                    return "Connected to daemon v" + finchClient.daemonVersion
+                default:
+                    return "Not connected to daemon"
+                }
+            }
+            color: {
+                switch (finchClient.connectionState) {
+                case FinchClient.Connecting:
+                    return "gray"
+                case FinchClient.Connected:
+                    return "green"
+                default:
+                    return "red"
+                }
+            }
             anchors.horizontalCenter: parent.horizontalCenter
-            color: finchClient.daemonVersion ? "green" : "red"
         }
 
         Button {
-            text: "Ping Daemon"
+            text: finchClient.pingInProgress ? "Pinging…" : "Ping Daemon"
+            enabled: !finchClient.pingInProgress
             anchors.horizontalCenter: parent.horizontalCenter
             onClicked: finchClient.ping()
         }

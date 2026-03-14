@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2)
+find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 Concurrent)
 find_package(Protobuf REQUIRED)
 find_package(gRPC CONFIG QUIET)
 
@@ -57,6 +57,7 @@ target_include_directories(finch-app PRIVATE ${GENERATED_DIR})
 target_link_libraries(finch-app PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
+    Qt6::Concurrent
     protobuf::libprotobuf
 )
 

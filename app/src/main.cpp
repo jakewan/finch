@@ -2,6 +2,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QUrl>
+#include <QtQml>
 
 #include "finchclient.h"
 
@@ -25,8 +26,10 @@ int main(int argc, char* argv[])
     app.setApplicationName("Finch");
     app.setApplicationVersion("0.1.0");
 
+    qmlRegisterUncreatableType<FinchClient>("Finch", 1, 0, "FinchClient",
+                                            "FinchClient is not creatable from QML");
+
     auto client = new FinchClient(QString::fromStdString(socketPath()), &app);
-    client->ping();
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("finchClient", client);
@@ -34,6 +37,8 @@ int main(int argc, char* argv[])
 
     if (engine.rootObjects().isEmpty())
         return -1;
+
+    client->ping();
 
     return app.exec();
 }
