@@ -23,6 +23,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             qt6-base-dev qt6-declarative-dev qml6-module-qtquick-controls \
+            qt6-charts-dev qml6-module-qtcharts \
             protobuf-compiler libprotobuf-dev libgrpc++-dev protobuf-compiler-grpc
 
       - name: Build

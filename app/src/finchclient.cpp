@@ -1,6 +1,7 @@
 #include "finchclient.h"
 
 #include <QTimer>
+#include <QVariantMap>
 #include <QtConcurrent>
 #include <chrono>
 #include <grpcpp/grpcpp.h>
@@ -16,13 +17,14 @@ FinchClient::FinchClient(const QString& socketPath, QObject* parent)
 
     connect(&m_pingWatcher, &QFutureWatcher<PingResult>::finished,
             this, &FinchClient::onPingFinished);
+    connect(&m_accountsWatcher, &QFutureWatcher<ListAccountsResult>::finished,
+            this, &FinchClient::onListAccountsFinished);
 }
 
 FinchClient::~FinchClient()
 {
-    // Wait for in-flight ping to complete before destroying the stub.
-    // Bounded by the 3-second gRPC deadline.
     m_pingWatcher.waitForFinished();
+    m_accountsWatcher.waitForFinished();
 }
 
 void FinchClient::ping()
@@ -53,6 +55,54 @@ void FinchClient::ping()
     });
 
     m_pingWatcher.setFuture(future);
+}
+
+void FinchClient::listAccounts()
+{
+    if (m_accountsLoading)
+        return;
+
+    m_accountsLoading = true;
+    emit accountsLoadingChanged();
+
+    auto stub = m_stub.get();
+    auto future = QtConcurrent::run([stub]() -> ListAccountsResult {
+        grpc::ClientContext context;
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
+
+        finch::v1::ListAccountsRequest request;
+        finch::v1::ListAccountsResponse response;
+
+        grpc::Status status = stub->ListAccounts(&context, request, &response);
+        if (!status.ok())
+            return {false, {}};
+
+        QVariantList accounts;
+        for (const auto& account : response.accounts()) {
+            QVariantMap entry;
+            entry["id"] = QString::fromStdString(account.id());
+            entry["name"] = QString::fromStdString(account.name());
+            accounts.append(entry);
+        }
+        return {true, accounts};
+    });
+
+    m_accountsWatcher.setFuture(future);
+}
+
+void FinchClient::onListAccountsFinished()
+{
+    auto result = m_accountsWatcher.result();
+
+    m_accountsLoading = false;
+    emit accountsLoadingChanged();
+
+    if (result.ok) {
+        m_accounts = result.accounts;
+    } else {
+        m_accounts.clear();
+    }
+    emit accountsChanged();
 }
 
 void FinchClient::onPingFinished()

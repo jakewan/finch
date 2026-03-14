@@ -41,14 +41,44 @@ ApplicationWindow {
         }
     }
 
+    Connections {
+        target: finchClient
+        function onConnectionStateChanged() {
+            if (finchClient.connectionState === FinchClient.Connected) {
+                finchClient.listAccounts()
+            }
+        }
+    }
+
     Item {
         anchors.fill: parent
 
         Label {
             anchors.centerIn: parent
-            text: "Chart view coming soon"
+            visible: !finchClient.accountsLoading && finchClient.accounts.length === 0
+            text: finchClient.connectionState === FinchClient.Connected
+                  ? "No accounts found"
+                  : "Not connected to daemon"
             font.pointSize: 12
             color: "gray"
+        }
+
+        BusyIndicator {
+            anchors.centerIn: parent
+            running: finchClient.accountsLoading
+        }
+
+        ListView {
+            anchors.fill: parent
+            anchors.margins: 16
+            visible: finchClient.connectionState === FinchClient.Connected
+                     && finchClient.accounts.length > 0
+            model: finchClient.accounts
+            spacing: 4
+            delegate: ItemDelegate {
+                width: ListView.view.width
+                text: modelData.name
+            }
         }
     }
 
