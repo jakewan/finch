@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/jakewan/finch/core"
+	"github.com/jakewan/finch/daemon/finchd"
 	finchv1 "github.com/jakewan/finch/daemon/gen/finch/v1"
 	"google.golang.org/grpc"
 )
@@ -42,7 +43,7 @@ func main() {
 	defer func() { _ = lis.Close() }()
 
 	srv := grpc.NewServer()
-	finchv1.RegisterFinchServiceServer(srv, &finchServer{db: db})
+	finchv1.RegisterFinchServiceServer(srv, finchd.NewServer(db))
 
 	// Graceful shutdown on SIGINT/SIGTERM.
 	go func() {
@@ -54,7 +55,7 @@ func main() {
 		srv.GracefulStop()
 	}()
 
-	log.Printf("finch-daemon %s listening on %s", version, sockPath)
+	log.Printf("finch-daemon %s listening on %s", finchd.Version, sockPath)
 	if err := srv.Serve(lis); err != nil {
 		log.Fatalf("serve: %v", err)
 	}
