@@ -57,12 +57,13 @@ ApplicationWindow {
             anchors.fill: parent
             anchors.margins: 16
             visible: finchClient.connectionState === FinchClient.Connected
+                     || !finchClient.timeSeriesEmpty
         }
 
         Label {
             anchors.centerIn: parent
-            visible: finchClient.connectionState !== FinchClient.Connected
-                     && !finchClient.pingInProgress
+            visible: finchClient.connectionState === FinchClient.Disconnected
+                     && finchClient.timeSeriesEmpty
             text: "Not connected to daemon"
             font.pointSize: 12
             color: "gray"
@@ -71,6 +72,7 @@ ApplicationWindow {
         BusyIndicator {
             anchors.centerIn: parent
             running: finchClient.pingInProgress
+                     && finchClient.timeSeriesEmpty
         }
     }
 
