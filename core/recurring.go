@@ -286,6 +286,16 @@ func (db *DB) setRecurringRulePaused(ctx context.Context, ruleID string, paused 
 		return fmt.Errorf("begin tx: %w", err)
 	}
 
+	var exists int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT 1 FROM recurring_rules WHERE id = ?", ruleID).Scan(&exists); err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("recurring rule %s not found", ruleID)
+		}
+		return fmt.Errorf("check rule exists: %w", err)
+	}
+
 	payload, _ := json.Marshal(struct{}{})
 	if _, err := appendEvents(ctx, tx, aggregateTypeRecurringRule, ruleID, []NewEvent{
 		{EventType: eventType, Payload: payload},
@@ -296,6 +306,55 @@ func (db *DB) setRecurringRulePaused(ctx context.Context, ruleID string, paused 
 
 	if _, err := tx.ExecContext(ctx,
 		"UPDATE recurring_rules SET paused = ? WHERE id = ?", boolToInt(paused), ruleID); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("update read model: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// EndRecurringRule sets or updates the end date for a recurring rule.
+func (db *DB) EndRecurringRule(ctx context.Context, ruleID string, endDate time.Time) error {
+	if ruleID == "" {
+		return errors.New("rule_id must not be empty")
+	}
+	if endDate.IsZero() {
+		return errors.New("end_date must not be zero")
+	}
+
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+
+	var exists int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT 1 FROM recurring_rules WHERE id = ?", ruleID).Scan(&exists); err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("recurring rule %s not found", ruleID)
+		}
+		return fmt.Errorf("check rule exists: %w", err)
+	}
+
+	payload, err := json.Marshal(RecurringRuleEndedPayload{
+		EndDate: endDate.Format(time.DateOnly),
+	})
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+
+	if _, err := appendEvents(ctx, tx, aggregateTypeRecurringRule, ruleID, []NewEvent{
+		{EventType: EventRecurringRuleEnded, Payload: payload},
+	}); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("append event: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE recurring_rules SET end_date = ? WHERE id = ?",
+		endDate.Format(time.DateOnly), ruleID); err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("update read model: %w", err)
 	}

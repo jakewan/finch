@@ -13,6 +13,9 @@ service FinchService {
   rpc ListRecurringRules(ListRecurringRulesRequest) returns (ListRecurringRulesResponse);
   rpc UpdateRecurringRuleAmount(UpdateRecurringRuleAmountRequest) returns (UpdateRecurringRuleAmountResponse);
   rpc GetRecurringRuleHistory(GetRecurringRuleHistoryRequest) returns (GetRecurringRuleHistoryResponse);
+  rpc PauseRecurringRule(PauseRecurringRuleRequest) returns (PauseRecurringRuleResponse);
+  rpc ResumeRecurringRule(ResumeRecurringRuleRequest) returns (ResumeRecurringRuleResponse);
+  rpc EndRecurringRule(EndRecurringRuleRequest) returns (EndRecurringRuleResponse);
   rpc RecordTransaction(RecordTransactionRequest) returns (RecordTransactionResponse);
   rpc ListTransactions(ListTransactionsRequest) returns (ListTransactionsResponse);
   rpc UpdateTransactionStatus(UpdateTransactionStatusRequest) returns (UpdateTransactionStatusResponse);
@@ -153,6 +156,25 @@ message GetRecurringRuleHistoryRequest {
 message GetRecurringRuleHistoryResponse {
   repeated AccountEvent events = 1;
 }
+
+message PauseRecurringRuleRequest {
+  string rule_id = 1;
+}
+
+message PauseRecurringRuleResponse {}
+
+message ResumeRecurringRuleRequest {
+  string rule_id = 1;
+}
+
+message ResumeRecurringRuleResponse {}
+
+message EndRecurringRuleRequest {
+  string rule_id = 1;
+  string end_date = 2;
+}
+
+message EndRecurringRuleResponse {}
 
 // Transactions
 
