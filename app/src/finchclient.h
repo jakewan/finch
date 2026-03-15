@@ -3,8 +3,11 @@
 
 #include <QElapsedTimer>
 #include <QFutureWatcher>
+#include <QMap>
 #include <QObject>
+#include <QPointF>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <memory>
 
@@ -21,6 +24,16 @@ struct ListAccountsResult {
     QVariantList accounts;
 };
 
+struct TimeSeriesPoint {
+    qint64 msecsSinceEpoch;
+    double balance;
+};
+
+struct TimeSeriesResult {
+    bool ok = false;
+    QMap<QString, QList<TimeSeriesPoint>> seriesByAccount;
+};
+
 class FinchClient : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString daemonVersion READ daemonVersion NOTIFY daemonVersionChanged)
@@ -28,6 +41,13 @@ class FinchClient : public QObject {
     Q_PROPERTY(bool pingInProgress READ pingInProgress NOTIFY pingInProgressChanged)
     Q_PROPERTY(QVariantList accounts READ accounts NOTIFY accountsChanged)
     Q_PROPERTY(bool accountsLoading READ accountsLoading NOTIFY accountsLoadingChanged)
+    Q_PROPERTY(bool timeSeriesLoading READ timeSeriesLoading NOTIFY timeSeriesLoadingChanged)
+    Q_PROPERTY(bool timeSeriesEmpty READ timeSeriesEmpty NOTIFY timeSeriesDataChanged)
+    Q_PROPERTY(QStringList timeSeriesAccountIds READ timeSeriesAccountIds NOTIFY timeSeriesDataChanged)
+    Q_PROPERTY(double timeSeriesMinDate READ timeSeriesMinDate NOTIFY timeSeriesDataChanged)
+    Q_PROPERTY(double timeSeriesMaxDate READ timeSeriesMaxDate NOTIFY timeSeriesDataChanged)
+    Q_PROPERTY(double timeSeriesMinBalance READ timeSeriesMinBalance NOTIFY timeSeriesDataChanged)
+    Q_PROPERTY(double timeSeriesMaxBalance READ timeSeriesMaxBalance NOTIFY timeSeriesDataChanged)
 
 public:
     enum ConnectionState { Disconnected, Connecting, Connected };
@@ -41,9 +61,19 @@ public:
     bool pingInProgress() const { return m_pingInProgress; }
     QVariantList accounts() const { return m_accounts; }
     bool accountsLoading() const { return m_accountsLoading; }
+    bool timeSeriesLoading() const { return m_timeSeriesLoading; }
+    bool timeSeriesEmpty() const;
+    QStringList timeSeriesAccountIds() const;
+    double timeSeriesMinDate() const;
+    double timeSeriesMaxDate() const;
+    double timeSeriesMinBalance() const;
+    double timeSeriesMaxBalance() const;
 
     Q_INVOKABLE void ping();
     Q_INVOKABLE void listAccounts();
+    Q_INVOKABLE void fetchTimeSeries(const QString& fromDate, const QString& toDate,
+                                     int interval, const QStringList& accountIds);
+    Q_INVOKABLE void populateSeries(QObject* series, const QString& accountId);
 
 signals:
     void daemonVersionChanged();
@@ -51,11 +81,14 @@ signals:
     void pingInProgressChanged();
     void accountsChanged();
     void accountsLoadingChanged();
+    void timeSeriesLoadingChanged();
+    void timeSeriesDataChanged();
 
 private slots:
     void onPingFinished();
     void applyPingResult();
     void onListAccountsFinished();
+    void onTimeSeriesFinished();
 
 private:
     std::shared_ptr<grpc::Channel> m_channel;
@@ -69,6 +102,9 @@ private:
     QVariantList m_accounts;
     bool m_accountsLoading = false;
     QFutureWatcher<ListAccountsResult> m_accountsWatcher;
+    bool m_timeSeriesLoading = false;
+    QFutureWatcher<TimeSeriesResult> m_timeSeriesWatcher;
+    TimeSeriesResult m_timeSeriesData;
 };
 
 #endif // FINCHCLIENT_H

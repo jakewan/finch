@@ -72,5 +72,5 @@ endif()
 qt_add_qml_module(finch-app
     URI Finch
     VERSION 1.0
-    QML_FILES qml/Main.qml
+    QML_FILES qml/Main.qml qml/BalanceChart.qml
 )

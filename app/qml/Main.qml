@@ -53,32 +53,24 @@ ApplicationWindow {
     Item {
         anchors.fill: parent
 
+        BalanceChart {
+            anchors.fill: parent
+            anchors.margins: 16
+            visible: finchClient.connectionState === FinchClient.Connected
+        }
+
         Label {
             anchors.centerIn: parent
-            visible: !finchClient.accountsLoading && finchClient.accounts.length === 0
-            text: finchClient.connectionState === FinchClient.Connected
-                  ? "No accounts found"
-                  : "Not connected to daemon"
+            visible: finchClient.connectionState !== FinchClient.Connected
+                     && !finchClient.pingInProgress
+            text: "Not connected to daemon"
             font.pointSize: 12
             color: "gray"
         }
 
         BusyIndicator {
             anchors.centerIn: parent
-            running: finchClient.accountsLoading
-        }
-
-        ListView {
-            anchors.fill: parent
-            anchors.margins: 16
-            visible: finchClient.connectionState === FinchClient.Connected
-                     && finchClient.accounts.length > 0
-            model: finchClient.accounts
-            spacing: 4
-            delegate: ItemDelegate {
-                width: ListView.view.width
-                text: modelData.name
-            }
+            running: finchClient.pingInProgress
         }
     }
 
