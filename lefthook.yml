@@ -1,0 +1,33 @@
+pre-commit:
+  parallel: true
+  commands:
+    go-fmt:
+      glob: "{core,daemon,mcp}/**/*.go"
+      run: gofmt -w {staged_files}
+      stage_fixed: true
+      skip: merge
+    buf-lint:
+      glob: "proto/**/*.proto"
+      run: buf lint
+      skip: merge
+
+pre-push:
+  piped: true
+  commands:
+    proto:
+      priority: 1
+      run: just proto
+      skip: merge
+    go-lint:
+      priority: 2
+      run: just lint
+      skip: merge
+    go-test:
+      priority: 3
+      run: just test
+      skip: merge
+    qt-build:
+      priority: 4
+      glob: "{app,proto}/**"
+      run: just build-app
+      skip: merge

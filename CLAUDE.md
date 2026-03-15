@@ -3,6 +3,7 @@
 ## Quick Start
 
 ```bash
+just hooks    # Install git hooks (one-time setup)
 just all      # Build everything
 just test     # Run all tests
 just lint     # Run linters
