@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 Concurrent Charts)
+find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 Concurrent Charts Widgets)
 find_package(Protobuf REQUIRED)
 find_package(gRPC CONFIG QUIET)
 
@@ -59,6 +59,7 @@ target_link_libraries(finch-app PRIVATE
     Qt6::QuickControls2
     Qt6::Concurrent
     Qt6::Charts
+    Qt6::Widgets
     protobuf::libprotobuf
 )
 
@@ -72,5 +73,5 @@ endif()
 qt_add_qml_module(finch-app
     URI Finch
     VERSION 1.0
-    QML_FILES qml/Main.qml
+    QML_FILES qml/Main.qml qml/BalanceChart.qml
 )
