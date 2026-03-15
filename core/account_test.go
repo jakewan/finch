@@ -99,6 +99,146 @@ func TestCreateAccountStoresEvent(t *testing.T) {
 	}
 }
 
+func TestRenameAccount(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	acct, err := db.CreateAccount(ctx, "Old Name", core.AccountTypeChecking)
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	if err := db.RenameAccount(ctx, acct.ID, "New Name"); err != nil {
+		t.Fatalf("RenameAccount: %v", err)
+	}
+
+	accounts, err := db.ListAccounts(ctx)
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	if len(accounts) != 1 {
+		t.Fatalf("expected 1 account, got %d", len(accounts))
+	}
+	if accounts[0].Name != "New Name" {
+		t.Fatalf("expected name 'New Name', got %q", accounts[0].Name)
+	}
+
+	events, err := db.GetAccountHistory(ctx, acct.ID)
+	if err != nil {
+		t.Fatalf("GetAccountHistory: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(events))
+	}
+	if events[1].EventType != "AccountRenamed" {
+		t.Fatalf("expected AccountRenamed, got %s", events[1].EventType)
+	}
+
+	var payload core.AccountRenamedPayload
+	if err := json.Unmarshal(events[1].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.OldName != "Old Name" || payload.NewName != "New Name" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+}
+
+func TestRenameAccountValidation(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	acct, err := db.CreateAccount(ctx, "Test", core.AccountTypeChecking)
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	if err := db.RenameAccount(ctx, "", "New"); err == nil {
+		t.Fatal("expected error for empty ID")
+	}
+	if err := db.RenameAccount(ctx, acct.ID, ""); err == nil {
+		t.Fatal("expected error for empty name")
+	}
+	if err := db.RenameAccount(ctx, acct.ID, "   "); err == nil {
+		t.Fatal("expected error for whitespace-only name")
+	}
+	if err := db.RenameAccount(ctx, "nonexistent-id", "New"); err == nil {
+		t.Fatal("expected error for nonexistent account")
+	}
+	if err := db.RenameAccount(ctx, acct.ID, "Test"); err == nil {
+		t.Fatal("expected error for same name")
+	}
+}
+
+func TestUpdateAccountType(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	acct, err := db.CreateAccount(ctx, "Test", core.AccountTypeChecking)
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	if err := db.UpdateAccountType(ctx, acct.ID, core.AccountTypeSavings); err != nil {
+		t.Fatalf("UpdateAccountType: %v", err)
+	}
+
+	accounts, err := db.ListAccounts(ctx)
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	if len(accounts) != 1 {
+		t.Fatalf("expected 1 account, got %d", len(accounts))
+	}
+	if accounts[0].Type != core.AccountTypeSavings {
+		t.Fatalf("expected type Savings, got %d", accounts[0].Type)
+	}
+
+	events, err := db.GetAccountHistory(ctx, acct.ID)
+	if err != nil {
+		t.Fatalf("GetAccountHistory: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(events))
+	}
+	if events[1].EventType != "AccountTypeChanged" {
+		t.Fatalf("expected AccountTypeChanged, got %s", events[1].EventType)
+	}
+
+	var payload core.AccountTypeChangedPayload
+	if err := json.Unmarshal(events[1].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.OldType != int(core.AccountTypeChecking) || payload.NewType != int(core.AccountTypeSavings) {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+}
+
+func TestUpdateAccountTypeValidation(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	acct, err := db.CreateAccount(ctx, "Test", core.AccountTypeChecking)
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	if err := db.UpdateAccountType(ctx, "", core.AccountTypeSavings); err == nil {
+		t.Fatal("expected error for empty ID")
+	}
+	if err := db.UpdateAccountType(ctx, acct.ID, core.AccountTypeUnspecified); err == nil {
+		t.Fatal("expected error for unspecified type")
+	}
+	if err := db.UpdateAccountType(ctx, acct.ID, core.AccountType(99)); err == nil {
+		t.Fatal("expected error for invalid type")
+	}
+	if err := db.UpdateAccountType(ctx, "nonexistent-id", core.AccountTypeSavings); err == nil {
+		t.Fatal("expected error for nonexistent account")
+	}
+	if err := db.UpdateAccountType(ctx, acct.ID, core.AccountTypeChecking); err == nil {
+		t.Fatal("expected error for same type")
+	}
+}
+
 func TestGetAccountHistoryEmpty(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()

@@ -129,6 +129,119 @@ func (db *DB) ListAccounts(ctx context.Context) ([]Account, error) {
 	return scanAccounts(rows)
 }
 
+// RenameAccount changes the name of an existing account.
+func (db *DB) RenameAccount(ctx context.Context, accountID, newName string) error {
+	if accountID == "" {
+		return errors.New("account_id must not be empty")
+	}
+	newName = strings.TrimSpace(newName)
+	if newName == "" {
+		return errors.New("account name must not be empty")
+	}
+
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+
+	var oldName string
+	var acctType int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT name, type FROM accounts WHERE id = ?", accountID).Scan(&oldName, &acctType); err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("account %s not found", accountID)
+		}
+		return fmt.Errorf("check account exists: %w", err)
+	}
+
+	if oldName == newName {
+		_ = tx.Rollback()
+		return errors.New("new name is the same as the current name")
+	}
+
+	payload, err := json.Marshal(AccountRenamedPayload{
+		OldName: oldName,
+		NewName: newName,
+	})
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+
+	if _, err := appendEvents(ctx, tx, aggregateTypeAccount, accountID, []NewEvent{
+		{EventType: EventAccountRenamed, Payload: payload},
+	}); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("append event: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE accounts SET name = ?, updated_at = ? WHERE id = ?",
+		newName, time.Now().UTC().Unix(), accountID); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("update read model: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// UpdateAccountType changes the type of an existing account.
+func (db *DB) UpdateAccountType(ctx context.Context, accountID string, newType AccountType) error {
+	if accountID == "" {
+		return errors.New("account_id must not be empty")
+	}
+	if !ValidAccountType(newType) {
+		return fmt.Errorf("invalid account type: %d", newType)
+	}
+
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+
+	var name string
+	var oldType int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT name, type FROM accounts WHERE id = ?", accountID).Scan(&name, &oldType); err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("account %s not found", accountID)
+		}
+		return fmt.Errorf("check account exists: %w", err)
+	}
+
+	if AccountType(oldType) == newType {
+		_ = tx.Rollback()
+		return errors.New("new type is the same as the current type")
+	}
+
+	payload, err := json.Marshal(AccountTypeChangedPayload{
+		OldType: oldType,
+		NewType: int(newType),
+	})
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+
+	if _, err := appendEvents(ctx, tx, aggregateTypeAccount, accountID, []NewEvent{
+		{EventType: EventAccountTypeChanged, Payload: payload},
+	}); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("append event: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE accounts SET type = ?, updated_at = ? WHERE id = ?",
+		int(newType), time.Now().UTC().Unix(), accountID); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("update read model: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 // GetAccountHistory returns the event history for a specific account.
 func (db *DB) GetAccountHistory(ctx context.Context, accountID string) ([]Event, error) {
 	return db.LoadEvents(ctx, aggregateTypeAccount, accountID)
