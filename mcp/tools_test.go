@@ -443,6 +443,158 @@ func TestRecurringRuleTools(t *testing.T) {
 		})
 	})
 
+	t.Run("pause_recurring_rule", func(t *testing.T) {
+		pauseHandler := newPauseRecurringRuleHandler(client)
+		listHandler := newListRecurringRulesHandler(client)
+
+		t.Run("pauses_an_active_rule", func(t *testing.T) {
+			ruleID := createTestRule(t, client, accountID)
+
+			_, _, err := pauseHandler(ctx, nil, PauseRecurringRuleInput{RuleID: ruleID})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			_, out, err := listHandler(ctx, nil, ListRecurringRulesInput{AccountID: accountID})
+			if err != nil {
+				t.Fatalf("list rules: %v", err)
+			}
+			for _, r := range out.Rules {
+				if r.ID == ruleID {
+					if !r.Paused {
+						t.Fatal("expected rule to be paused")
+					}
+					return
+				}
+			}
+			t.Fatal("rule not found in list")
+		})
+	})
+
+	t.Run("resume_recurring_rule", func(t *testing.T) {
+		pauseHandler := newPauseRecurringRuleHandler(client)
+		resumeHandler := newResumeRecurringRuleHandler(client)
+		listHandler := newListRecurringRulesHandler(client)
+
+		t.Run("resumes_a_paused_rule", func(t *testing.T) {
+			ruleID := createTestRule(t, client, accountID)
+
+			_, _, err := pauseHandler(ctx, nil, PauseRecurringRuleInput{RuleID: ruleID})
+			if err != nil {
+				t.Fatalf("pause: %v", err)
+			}
+
+			_, _, err = resumeHandler(ctx, nil, ResumeRecurringRuleInput{RuleID: ruleID})
+			if err != nil {
+				t.Fatalf("resume: %v", err)
+			}
+
+			_, out, err := listHandler(ctx, nil, ListRecurringRulesInput{AccountID: accountID})
+			if err != nil {
+				t.Fatalf("list rules: %v", err)
+			}
+			for _, r := range out.Rules {
+				if r.ID == ruleID {
+					if r.Paused {
+						t.Fatal("expected rule to be resumed")
+					}
+					return
+				}
+			}
+			t.Fatal("rule not found in list")
+		})
+	})
+
+	t.Run("end_recurring_rule", func(t *testing.T) {
+		endHandler := newEndRecurringRuleHandler(client)
+		listHandler := newListRecurringRulesHandler(client)
+
+		t.Run("sets_end_date_on_rule", func(t *testing.T) {
+			ruleID := createTestRule(t, client, accountID)
+
+			_, _, err := endHandler(ctx, nil, EndRecurringRuleInput{
+				RuleID:  ruleID,
+				EndDate: "2025-06-30",
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			_, out, err := listHandler(ctx, nil, ListRecurringRulesInput{AccountID: accountID})
+			if err != nil {
+				t.Fatalf("list rules: %v", err)
+			}
+			for _, r := range out.Rules {
+				if r.ID == ruleID {
+					if r.EndDate != "2025-06-30" {
+						t.Fatalf("expected end_date 2025-06-30, got %q", r.EndDate)
+					}
+					return
+				}
+			}
+			t.Fatal("rule not found in list")
+		})
+
+		t.Run("ended_rule_stops_projections_after_end_date", func(t *testing.T) {
+			freshClient := startTestBackend(t)
+			freshAcctID := createTestAccount(t, freshClient)
+
+			// Seed opening balance.
+			recHandler := newRecordTransactionHandler(freshClient)
+			_, _, err := recHandler(ctx, nil, RecordTransactionInput{
+				AccountID: freshAcctID,
+				Date:      "2025-01-01",
+				Amount:    500000,
+				Name:      "Opening Balance",
+				Status:    "RECONCILED",
+			})
+			if err != nil {
+				t.Fatalf("seed opening balance: %v", err)
+			}
+
+			// Create rule starting Jan 1, then end it on Mar 31.
+			ruleResp, err := freshClient.CreateRecurringRule(ctx, &finchv1.CreateRecurringRuleRequest{
+				AccountId:  freshAcctID,
+				Name:       "Ending Rule",
+				Amount:     -100000,
+				Frequency:  finchv1.Frequency_FREQUENCY_MONTHLY,
+				StartDate:  "2025-01-01",
+				DayOfMonth: 1,
+			})
+			if err != nil {
+				t.Fatalf("create rule: %v", err)
+			}
+
+			freshEndHandler := newEndRecurringRuleHandler(freshClient)
+			_, _, err = freshEndHandler(ctx, nil, EndRecurringRuleInput{
+				RuleID:  ruleResp.Rule.Id,
+				EndDate: "2025-03-31",
+			})
+			if err != nil {
+				t.Fatalf("end rule: %v", err)
+			}
+
+			// Project through June — should see no transactions after March.
+			projHandler := newProjectBalancesHandler(freshClient)
+			_, projOut, err := projHandler(ctx, nil, ProjectBalancesInput{
+				FromDate:   "2025-01-01",
+				ToDate:     "2025-06-30",
+				AccountIDs: []string{freshAcctID},
+			})
+			if err != nil {
+				t.Fatalf("project balances: %v", err)
+			}
+
+			for _, b := range projOut.Balances {
+				for _, txn := range b.Transactions {
+					if txn.RecurringRuleID == ruleResp.Rule.Id && txn.Date > "2025-03-31" {
+						t.Fatalf("found projected transaction after end date: %s on %s", txn.Name, txn.Date)
+					}
+				}
+			}
+		})
+	})
+
 	t.Run("get_recurring_rule_history", func(t *testing.T) {
 		handler := newGetRecurringRuleHistoryHandler(client)
 		ruleID := createTestRule(t, client, accountID)

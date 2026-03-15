@@ -52,6 +52,21 @@ func registerTools(server *mcp.Server, client finchv1.FinchServiceClient) {
 	}, newGetRecurringRuleHistoryHandler(client))
 
 	mcp.AddTool(server, &mcp.Tool{
+		Name:        "pause_recurring_rule",
+		Description: "Pause a recurring rule so it stops generating projected transactions.",
+	}, newPauseRecurringRuleHandler(client))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "resume_recurring_rule",
+		Description: "Resume a paused recurring rule so it generates projected transactions again.",
+	}, newResumeRecurringRuleHandler(client))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "end_recurring_rule",
+		Description: "Set or update the end date for a recurring rule. No transactions will be projected after this date.",
+	}, newEndRecurringRuleHandler(client))
+
+	mcp.AddTool(server, &mcp.Tool{
 		Name:        "record_transaction",
 		Description: "Record a financial transaction. Amount is in cents (negative for withdrawals). Status: PROJECTED, SCHEDULED, or RECONCILED.",
 	}, newRecordTransactionHandler(client))
@@ -361,6 +376,65 @@ func newGetRecurringRuleHistoryHandler(client finchv1.FinchServiceClient) func(c
 			return nil, GetRecurringRuleHistoryOutput{}, fmt.Errorf("get recurring rule history: %w", err)
 		}
 		return nil, GetRecurringRuleHistoryOutput{Events: protoEventsToInfo(resp.Events)}, nil
+	}
+}
+
+// PauseRecurringRule
+
+type PauseRecurringRuleInput struct {
+	RuleID string `json:"rule_id" jsonschema:"UUID of the recurring rule to pause"`
+}
+type PauseRecurringRuleOutput struct{}
+
+func newPauseRecurringRuleHandler(client finchv1.FinchServiceClient) func(context.Context, *mcp.CallToolRequest, PauseRecurringRuleInput) (*mcp.CallToolResult, PauseRecurringRuleOutput, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, input PauseRecurringRuleInput) (*mcp.CallToolResult, PauseRecurringRuleOutput, error) {
+		_, err := client.PauseRecurringRule(ctx, &finchv1.PauseRecurringRuleRequest{
+			RuleId: input.RuleID,
+		})
+		if err != nil {
+			return nil, PauseRecurringRuleOutput{}, fmt.Errorf("pause recurring rule: %w", err)
+		}
+		return nil, PauseRecurringRuleOutput{}, nil
+	}
+}
+
+// ResumeRecurringRule
+
+type ResumeRecurringRuleInput struct {
+	RuleID string `json:"rule_id" jsonschema:"UUID of the recurring rule to resume"`
+}
+type ResumeRecurringRuleOutput struct{}
+
+func newResumeRecurringRuleHandler(client finchv1.FinchServiceClient) func(context.Context, *mcp.CallToolRequest, ResumeRecurringRuleInput) (*mcp.CallToolResult, ResumeRecurringRuleOutput, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, input ResumeRecurringRuleInput) (*mcp.CallToolResult, ResumeRecurringRuleOutput, error) {
+		_, err := client.ResumeRecurringRule(ctx, &finchv1.ResumeRecurringRuleRequest{
+			RuleId: input.RuleID,
+		})
+		if err != nil {
+			return nil, ResumeRecurringRuleOutput{}, fmt.Errorf("resume recurring rule: %w", err)
+		}
+		return nil, ResumeRecurringRuleOutput{}, nil
+	}
+}
+
+// EndRecurringRule
+
+type EndRecurringRuleInput struct {
+	RuleID  string `json:"rule_id" jsonschema:"UUID of the recurring rule to end"`
+	EndDate string `json:"end_date" jsonschema:"end date (YYYY-MM-DD), no transactions projected after this date"`
+}
+type EndRecurringRuleOutput struct{}
+
+func newEndRecurringRuleHandler(client finchv1.FinchServiceClient) func(context.Context, *mcp.CallToolRequest, EndRecurringRuleInput) (*mcp.CallToolResult, EndRecurringRuleOutput, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, input EndRecurringRuleInput) (*mcp.CallToolResult, EndRecurringRuleOutput, error) {
+		_, err := client.EndRecurringRule(ctx, &finchv1.EndRecurringRuleRequest{
+			RuleId:  input.RuleID,
+			EndDate: input.EndDate,
+		})
+		if err != nil {
+			return nil, EndRecurringRuleOutput{}, fmt.Errorf("end recurring rule: %w", err)
+		}
+		return nil, EndRecurringRuleOutput{}, nil
 	}
 }
 

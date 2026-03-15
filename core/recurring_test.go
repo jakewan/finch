@@ -160,6 +160,102 @@ func TestPauseAndResumeRecurringRule(t *testing.T) {
 	}
 }
 
+func TestEndRecurringRule(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	acct := createTestAccount(t, db)
+
+	t.Run("sets end date on rule without one", func(t *testing.T) {
+		rule, err := db.CreateRecurringRule(ctx, core.CreateRecurringRuleParams{
+			AccountID:  acct.ID,
+			Name:       "Gym Membership",
+			Amount:     -5000,
+			Frequency:  core.FrequencyMonthly,
+			StartDate:  date(2025, 1, 1),
+			DayOfMonth: 15,
+		})
+		if err != nil {
+			t.Fatalf("CreateRecurringRule: %v", err)
+		}
+
+		endDate := date(2025, 6, 30)
+		if err := db.EndRecurringRule(ctx, rule.ID, endDate); err != nil {
+			t.Fatalf("EndRecurringRule: %v", err)
+		}
+
+		rules, err := db.ListRecurringRules(ctx, acct.ID)
+		if err != nil {
+			t.Fatalf("ListRecurringRules: %v", err)
+		}
+		var found bool
+		for _, r := range rules {
+			if r.ID == rule.ID {
+				found = true
+				if r.EndDate == nil {
+					t.Fatal("expected non-nil end date")
+				}
+				if !r.EndDate.Equal(endDate) {
+					t.Fatalf("expected end date %s, got %s", endDate, *r.EndDate)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("rule not found in list")
+		}
+	})
+
+	t.Run("produces RecurringRuleEnded event", func(t *testing.T) {
+		rule, err := db.CreateRecurringRule(ctx, core.CreateRecurringRuleParams{
+			AccountID:  acct.ID,
+			Name:       "Streaming Service",
+			Amount:     -1499,
+			Frequency:  core.FrequencyMonthly,
+			StartDate:  date(2025, 1, 1),
+			DayOfMonth: 1,
+		})
+		if err != nil {
+			t.Fatalf("CreateRecurringRule: %v", err)
+		}
+
+		if err := db.EndRecurringRule(ctx, rule.ID, date(2025, 12, 31)); err != nil {
+			t.Fatalf("EndRecurringRule: %v", err)
+		}
+
+		events, err := db.GetRecurringRuleHistory(ctx, rule.ID)
+		if err != nil {
+			t.Fatalf("GetRecurringRuleHistory: %v", err)
+		}
+		if len(events) != 2 {
+			t.Fatalf("expected 2 events, got %d", len(events))
+		}
+		if events[1].EventType != "RecurringRuleEnded" {
+			t.Fatalf("expected RecurringRuleEnded, got %s", events[1].EventType)
+		}
+	})
+
+	t.Run("rejects empty rule ID", func(t *testing.T) {
+		if err := db.EndRecurringRule(ctx, "", date(2025, 6, 30)); err == nil {
+			t.Fatal("expected error for empty rule ID")
+		}
+	})
+
+	t.Run("rejects zero end date", func(t *testing.T) {
+		rule, err := db.CreateRecurringRule(ctx, core.CreateRecurringRuleParams{
+			AccountID:  acct.ID,
+			Name:       "Zero Date Test",
+			Amount:     -100,
+			Frequency:  core.FrequencyWeekly,
+			StartDate:  date(2025, 1, 1),
+		})
+		if err != nil {
+			t.Fatalf("CreateRecurringRule: %v", err)
+		}
+		if err := db.EndRecurringRule(ctx, rule.ID, time.Time{}); err == nil {
+			t.Fatal("expected error for zero end date")
+		}
+	})
+}
+
 func TestListRecurringRulesAllAccounts(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
