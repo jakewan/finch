@@ -117,6 +117,80 @@ func TestGetAccountHistoryViaGRPC(t *testing.T) {
 	}
 }
 
+func TestListTransactionsViaGRPC(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+
+	acctResp, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
+		Name: "Txn List Test",
+		Type: finchv1.AccountType_ACCOUNT_TYPE_CHECKING,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+	accountID := acctResp.Account.Id
+
+	// Record two transactions.
+	_, err = client.RecordTransaction(ctx, &finchv1.RecordTransactionRequest{
+		AccountId: accountID,
+		Date:      "2025-01-10",
+		Amount:    -5000,
+		Name:      "Coffee",
+		Status:    finchv1.TransactionStatus_TRANSACTION_STATUS_RECONCILED,
+	})
+	if err != nil {
+		t.Fatalf("RecordTransaction 1: %v", err)
+	}
+	_, err = client.RecordTransaction(ctx, &finchv1.RecordTransactionRequest{
+		AccountId: accountID,
+		Date:      "2025-01-15",
+		Amount:    -12000,
+		Name:      "Groceries",
+		Status:    finchv1.TransactionStatus_TRANSACTION_STATUS_SCHEDULED,
+	})
+	if err != nil {
+		t.Fatalf("RecordTransaction 2: %v", err)
+	}
+
+	listResp, err := client.ListTransactions(ctx, &finchv1.ListTransactionsRequest{
+		AccountId: accountID,
+	})
+	if err != nil {
+		t.Fatalf("ListTransactions: %v", err)
+	}
+	if len(listResp.Transactions) != 2 {
+		t.Fatalf("expected 2 transactions, got %d", len(listResp.Transactions))
+	}
+
+	// Verify field mapping on first transaction.
+	found := false
+	for _, txn := range listResp.Transactions {
+		if txn.Name == "Coffee" {
+			found = true
+			if txn.Amount != -5000 {
+				t.Fatalf("expected amount -5000, got %d", txn.Amount)
+			}
+			if txn.AccountId != accountID {
+				t.Fatalf("expected account_id %q, got %q", accountID, txn.AccountId)
+			}
+			if txn.Date != "2025-01-10" {
+				t.Fatalf("expected date 2025-01-10, got %q", txn.Date)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected to find Coffee transaction")
+	}
+
+	// Empty account_id returns error.
+	_, err = client.ListTransactions(ctx, &finchv1.ListTransactionsRequest{
+		AccountId: "",
+	})
+	if err == nil {
+		t.Fatal("expected error for empty account_id")
+	}
+}
+
 func TestProjectBalancesViaGRPC(t *testing.T) {
 	client := startTestServer(t)
 	ctx := context.Background()

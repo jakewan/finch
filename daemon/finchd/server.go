@@ -93,13 +93,13 @@ func (s *Server) CreateRecurringRule(ctx context.Context, req *finchv1.CreateRec
 	}
 
 	params := core.CreateRecurringRuleParams{
-		AccountID:              req.AccountId,
-		Name:                   req.Name,
-		Amount:                 req.Amount,
-		Frequency:              core.Frequency(req.Frequency),
-		StartDate:              startDate,
-		DayOfMonth:             int(req.DayOfMonth),
-		IsTransfer:             req.IsTransfer,
+		AccountID:               req.AccountId,
+		Name:                    req.Name,
+		Amount:                  req.Amount,
+		Frequency:               core.Frequency(req.Frequency),
+		StartDate:               startDate,
+		DayOfMonth:              int(req.DayOfMonth),
+		IsTransfer:              req.IsTransfer,
 		TransferTargetAccountID: req.TransferTargetAccountId,
 	}
 
@@ -194,6 +194,21 @@ func (s *Server) RecordTransaction(ctx context.Context, req *finchv1.RecordTrans
 	return &finchv1.RecordTransactionResponse{
 		Transaction: transactionToProto(txn),
 	}, nil
+}
+
+func (s *Server) ListTransactions(ctx context.Context, req *finchv1.ListTransactionsRequest) (*finchv1.ListTransactionsResponse, error) {
+	if strings.TrimSpace(req.AccountId) == "" {
+		return nil, status.Error(codes.InvalidArgument, "account_id must not be empty")
+	}
+	txns, err := s.db.ListTransactions(ctx, req.AccountId)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list transactions: %v", err)
+	}
+	resp := &finchv1.ListTransactionsResponse{}
+	for _, t := range txns {
+		resp.Transactions = append(resp.Transactions, transactionToProto(&t))
+	}
+	return resp, nil
 }
 
 func (s *Server) UpdateTransactionStatus(ctx context.Context, req *finchv1.UpdateTransactionStatusRequest) (*finchv1.UpdateTransactionStatusResponse, error) {
@@ -376,16 +391,16 @@ func eventsToProto(events []core.Event) *finchv1.GetAccountHistoryResponse {
 
 func recurringRuleToProto(r *core.RecurringRule) *finchv1.RecurringRule {
 	rule := &finchv1.RecurringRule{
-		Id:                       r.ID,
-		AccountId:                r.AccountID,
-		Name:                     r.Name,
-		Amount:                   r.Amount,
-		Frequency:                finchv1.Frequency(r.Frequency),
-		StartDate:                r.StartDate.Format(time.DateOnly),
-		DayOfMonth:               int32(r.DayOfMonth),
-		IsTransfer:               r.IsTransfer,
-		TransferTargetAccountId:  r.TransferTargetAccountID,
-		Paused:                   r.Paused,
+		Id:                      r.ID,
+		AccountId:               r.AccountID,
+		Name:                    r.Name,
+		Amount:                  r.Amount,
+		Frequency:               finchv1.Frequency(r.Frequency),
+		StartDate:               r.StartDate.Format(time.DateOnly),
+		DayOfMonth:              int32(r.DayOfMonth),
+		IsTransfer:              r.IsTransfer,
+		TransferTargetAccountId: r.TransferTargetAccountID,
+		Paused:                  r.Paused,
 	}
 	if r.EndDate != nil {
 		rule.EndDate = r.EndDate.Format(time.DateOnly)

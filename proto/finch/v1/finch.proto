@@ -14,6 +14,7 @@ service FinchService {
   rpc UpdateRecurringRuleAmount(UpdateRecurringRuleAmountRequest) returns (UpdateRecurringRuleAmountResponse);
   rpc GetRecurringRuleHistory(GetRecurringRuleHistoryRequest) returns (GetRecurringRuleHistoryResponse);
   rpc RecordTransaction(RecordTransactionRequest) returns (RecordTransactionResponse);
+  rpc ListTransactions(ListTransactionsRequest) returns (ListTransactionsResponse);
   rpc UpdateTransactionStatus(UpdateTransactionStatusRequest) returns (UpdateTransactionStatusResponse);
   rpc CreateTransfer(CreateTransferRequest) returns (CreateTransferResponse);
   rpc ProjectBalances(ProjectBalancesRequest) returns (ProjectBalancesResponse);
@@ -178,6 +179,14 @@ message RecordTransactionRequest {
 
 message RecordTransactionResponse {
   Transaction transaction = 1;
+}
+
+message ListTransactionsRequest {
+  string account_id = 1;
+}
+
+message ListTransactionsResponse {
+  repeated Transaction transactions = 1;
 }
 
 message UpdateTransactionStatusRequest {
