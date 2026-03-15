@@ -2,6 +2,7 @@ package core_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -236,6 +237,16 @@ func TestEndRecurringRule(t *testing.T) {
 	t.Run("rejects empty rule ID", func(t *testing.T) {
 		if err := db.EndRecurringRule(ctx, "", date(2025, 6, 30)); err == nil {
 			t.Fatal("expected error for empty rule ID")
+		}
+	})
+
+	t.Run("rejects nonexistent rule ID", func(t *testing.T) {
+		err := db.EndRecurringRule(ctx, "nonexistent-id", date(2025, 6, 30))
+		if err == nil {
+			t.Fatal("expected error for nonexistent rule ID")
+		}
+		if !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("expected 'not found' in error, got: %s", err.Error())
 		}
 	})
 

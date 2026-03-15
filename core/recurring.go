@@ -286,6 +286,16 @@ func (db *DB) setRecurringRulePaused(ctx context.Context, ruleID string, paused 
 		return fmt.Errorf("begin tx: %w", err)
 	}
 
+	var exists int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT 1 FROM recurring_rules WHERE id = ?", ruleID).Scan(&exists); err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("recurring rule %s not found", ruleID)
+		}
+		return fmt.Errorf("check rule exists: %w", err)
+	}
+
 	payload, _ := json.Marshal(struct{}{})
 	if _, err := appendEvents(ctx, tx, aggregateTypeRecurringRule, ruleID, []NewEvent{
 		{EventType: eventType, Payload: payload},
@@ -315,6 +325,16 @@ func (db *DB) EndRecurringRule(ctx context.Context, ruleID string, endDate time.
 	tx, err := db.conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
+	}
+
+	var exists int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT 1 FROM recurring_rules WHERE id = ?", ruleID).Scan(&exists); err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("recurring rule %s not found", ruleID)
+		}
+		return fmt.Errorf("check rule exists: %w", err)
 	}
 
 	payload, err := json.Marshal(RecurringRuleEndedPayload{

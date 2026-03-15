@@ -156,7 +156,7 @@ func (s *Server) PauseRecurringRule(ctx context.Context, req *finchv1.PauseRecur
 		return nil, status.Error(codes.InvalidArgument, "rule_id must not be empty")
 	}
 	if err := s.db.PauseRecurringRule(ctx, req.RuleId); err != nil {
-		return nil, status.Errorf(codes.Internal, "pause recurring rule: %v", err)
+		return nil, ruleError("pause recurring rule", err)
 	}
 	return &finchv1.PauseRecurringRuleResponse{}, nil
 }
@@ -166,7 +166,7 @@ func (s *Server) ResumeRecurringRule(ctx context.Context, req *finchv1.ResumeRec
 		return nil, status.Error(codes.InvalidArgument, "rule_id must not be empty")
 	}
 	if err := s.db.ResumeRecurringRule(ctx, req.RuleId); err != nil {
-		return nil, status.Errorf(codes.Internal, "resume recurring rule: %v", err)
+		return nil, ruleError("resume recurring rule", err)
 	}
 	return &finchv1.ResumeRecurringRuleResponse{}, nil
 }
@@ -180,7 +180,7 @@ func (s *Server) EndRecurringRule(ctx context.Context, req *finchv1.EndRecurring
 		return nil, status.Errorf(codes.InvalidArgument, "invalid end_date: %v", err)
 	}
 	if err := s.db.EndRecurringRule(ctx, req.RuleId, endDate); err != nil {
-		return nil, status.Errorf(codes.Internal, "end recurring rule: %v", err)
+		return nil, ruleError("end recurring rule", err)
 	}
 	return &finchv1.EndRecurringRuleResponse{}, nil
 }
@@ -405,6 +405,14 @@ func (s *Server) GetBalanceTimeSeries(ctx context.Context, req *finchv1.GetBalan
 		resp.Points = append(resp.Points, tp)
 	}
 	return resp, nil
+}
+
+// ruleError maps core recurring rule errors to gRPC status codes.
+func ruleError(op string, err error) error {
+	if strings.Contains(err.Error(), "not found") {
+		return status.Errorf(codes.NotFound, "%s: %v", op, err)
+	}
+	return status.Errorf(codes.Internal, "%s: %v", op, err)
 }
 
 // Mapping helpers
