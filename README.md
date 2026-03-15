@@ -72,3 +72,7 @@ mcp/finch-mcp           # Start the MCP server (connects to daemon)
 | `mcp/` | MCP server binary (Go module, depends on core) |
 | `app/` | Qt/QML desktop application (C++) |
 | `proto/` | Protobuf service definitions |
+
+## Development
+
+This project is developed with assistance from [Claude Code](https://claude.com/claude-code).
