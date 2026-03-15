@@ -74,3 +74,7 @@ install-service: build-daemon
 install-mcp: build-mcp
     mkdir -p ~/.local/bin
     cp mcp/finch-mcp ~/.local/bin/
+
+# Install git hooks via lefthook
+hooks:
+    lefthook install
