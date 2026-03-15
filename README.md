@@ -23,6 +23,7 @@ The C++/Qt app requires system-level packages. On Ubuntu/Debian:
 
 ```bash
 sudo apt install cmake qt6-base-dev qt6-declarative-dev qml6-module-qtquick-controls \
+  qt6-charts-dev qml6-module-qtcharts \
   protobuf-compiler libprotobuf-dev libgrpc++-dev protobuf-compiler-grpc
 ```
 
@@ -32,6 +33,7 @@ sudo apt install cmake qt6-base-dev qt6-declarative-dev qml6-module-qtquick-cont
 mise install       # Install pinned tool versions
 just proto         # Generate protobuf Go code
 just all           # Build daemon and MCP server
+just build-app     # Build the Qt desktop app
 just test          # Run all Go tests
 just lint          # Run golangci-lint on all modules
 ```
@@ -45,6 +47,14 @@ just install-service
 ```
 
 This builds the daemon, copies it to `~/.local/bin/`, installs the systemd unit, and starts the service.
+
+### Install the MCP server
+
+```bash
+just install-mcp
+```
+
+This builds the MCP binary and copies it to `~/.local/bin/`.
 
 ### Manual
 
