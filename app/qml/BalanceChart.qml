@@ -28,7 +28,7 @@ ColumnLayout {
         if (selectedAccountId === "")
             return
         finchClient.fetchTimeSeries(fromField.text, toField.text,
-                                    intervalBox.currentValue,
+                                    intervalBox.selectedInterval,
                                     [selectedAccountId])
     }
 
@@ -73,8 +73,8 @@ ColumnLayout {
         ComboBox {
             id: intervalBox
             model: ["Daily", "Weekly", "Monthly"]
-            property var values: [1, 2, 3]
-            property int currentValue: values[currentIndex]
+            property var intervalValues: [1, 2, 3]
+            property int selectedInterval: intervalValues[currentIndex]
             currentIndex: 1
         }
 

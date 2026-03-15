@@ -3,7 +3,6 @@
 #include <QDate>
 #include <QDateTime>
 #include <QTime>
-#include <QTimeZone>
 #include <QTimer>
 #include <QVariantMap>
 #include <QtConcurrent>
@@ -139,7 +138,7 @@ void FinchClient::fetchTimeSeries(const QString& fromDate, const QString& toDate
             QDate date = QDate::fromString(QString::fromStdString(point.date()), "yyyy-MM-dd");
             if (!date.isValid())
                 continue;
-            qint64 msec = QDateTime(date, QTime(0, 0), QTimeZone::UTC).toMSecsSinceEpoch();
+            qint64 msec = QDateTime(date, QTime(0, 0), Qt::UTC).toMSecsSinceEpoch();
 
             for (const auto& ab : point.balances()) {
                 QString accountId = QString::fromStdString(ab.account_id());
