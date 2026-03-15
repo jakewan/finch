@@ -10,12 +10,17 @@ ColumnLayout {
 
     property var selectedAccountIds: []
     property var dynamicSeries: []
+    property bool pendingFetch: false
 
     // D3 "tab10" palette — colorblind-considerate, widely used
     readonly property var colorPalette: [
         "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
         "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
     ]
+
+    // Chart is visible when there are selected accounts AND data exists
+    readonly property bool chartVisible: selectedAccountIds.length > 0
+                                         && !finchClient.timeSeriesEmpty
 
     function defaultFromDate() {
         return new Date().toISOString().slice(0, 10)
@@ -30,6 +35,10 @@ ColumnLayout {
     function fetch() {
         if (selectedAccountIds.length === 0)
             return
+        if (finchClient.timeSeriesLoading) {
+            pendingFetch = true
+            return
+        }
         finchClient.fetchTimeSeries(fromField.text, toField.text,
                                     intervalBox.selectedInterval,
                                     selectedAccountIds)
@@ -43,10 +52,16 @@ ColumnLayout {
         return colorPalette[0]
     }
 
-    function rebuildSeries() {
-        for (let i = 0; i < dynamicSeries.length; i++)
+    function clearSeries() {
+        for (let i = 0; i < dynamicSeries.length; i++) {
             chartView.removeSeries(dynamicSeries[i])
+            dynamicSeries[i].destroy()
+        }
         dynamicSeries = []
+    }
+
+    function rebuildSeries() {
+        clearSeries()
 
         let ids = finchClient.timeSeriesAccountIds
         let created = []
@@ -80,10 +95,29 @@ ColumnLayout {
         target: finchClient
         function onAccountsChanged() {
             if (finchClient.accounts.length > 0) {
-                let ids = []
-                for (let i = 0; i < finchClient.accounts.length; i++)
-                    ids.push(finchClient.accounts[i].id)
-                root.selectedAccountIds = ids
+                if (root.selectedAccountIds.length === 0) {
+                    // First load — select all accounts
+                    let ids = []
+                    for (let i = 0; i < finchClient.accounts.length; i++)
+                        ids.push(finchClient.accounts[i].id)
+                    root.selectedAccountIds = ids
+                } else {
+                    // Preserve selections that still exist, add new accounts
+                    let validIds = []
+                    let knownIds = root.selectedAccountIds
+                    for (let i = 0; i < finchClient.accounts.length; i++) {
+                        let id = finchClient.accounts[i].id
+                        if (knownIds.indexOf(id) !== -1)
+                            validIds.push(id)
+                    }
+                    // Auto-select any newly added accounts
+                    for (let i = 0; i < finchClient.accounts.length; i++) {
+                        let id = finchClient.accounts[i].id
+                        if (validIds.indexOf(id) === -1)
+                            validIds.push(id)
+                    }
+                    root.selectedAccountIds = validIds
+                }
                 root.fetch()
             }
         }
@@ -95,6 +129,12 @@ ColumnLayout {
                 axisY.max = finchClient.timeSeriesMaxBalance
             }
             root.rebuildSeries()
+        }
+        function onTimeSeriesLoadingChanged() {
+            if (!finchClient.timeSeriesLoading && root.pendingFetch) {
+                root.pendingFetch = false
+                root.fetch()
+            }
         }
     }
 
@@ -172,7 +212,10 @@ ColumnLayout {
                             else if (!checked && idx !== -1)
                                 ids.splice(idx, 1)
                             root.selectedAccountIds = ids
-                            fetchDebounce.restart()
+                            if (ids.length === 0)
+                                root.clearSeries()
+                            else
+                                fetchDebounce.restart()
                         }
                     }
                 }
@@ -186,7 +229,7 @@ ColumnLayout {
             ChartView {
                 id: chartView
                 anchors.fill: parent
-                visible: !finchClient.timeSeriesEmpty
+                visible: root.chartVisible
                 antialiasing: true
                 legend.visible: true
                 theme: ChartView.ChartThemeLight
@@ -213,7 +256,7 @@ ColumnLayout {
                 anchors.centerIn: parent
                 visible: !finchClient.accountsLoading
                          && !finchClient.timeSeriesLoading
-                         && finchClient.timeSeriesEmpty
+                         && !root.chartVisible
                 text: {
                     if (finchClient.accounts.length === 0)
                         return "No accounts found"
