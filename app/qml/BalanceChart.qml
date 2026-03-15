@@ -117,8 +117,11 @@ ColumnLayout {
 
         Label {
             anchors.centerIn: parent
-            visible: finchClient.timeSeriesEmpty && !finchClient.timeSeriesLoading
-            text: "No data"
+            visible: !finchClient.accountsLoading && !finchClient.timeSeriesLoading
+                     && finchClient.timeSeriesEmpty
+            text: finchClient.accounts.length === 0
+                  ? "No accounts found"
+                  : "No data for selected range"
             font.pointSize: 12
             color: "gray"
         }

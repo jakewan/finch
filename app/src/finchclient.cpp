@@ -108,6 +108,9 @@ void FinchClient::fetchTimeSeries(const QString& fromDate, const QString& toDate
     m_timeSeriesLoading = true;
     emit timeSeriesLoadingChanged();
 
+    m_timeSeriesData = {};
+    emit timeSeriesDataChanged();
+
     auto stub = m_stub.get();
     std::string from = fromDate.toStdString();
     std::string to = toDate.toStdString();
@@ -205,30 +208,31 @@ double FinchClient::timeSeriesMaxDate() const
 double FinchClient::timeSeriesMinBalance() const
 {
     double min = std::numeric_limits<double>::max();
+    double max = std::numeric_limits<double>::lowest();
     for (const auto& points : m_timeSeriesData.seriesByAccount) {
-        for (const auto& pt : points)
+        for (const auto& pt : points) {
             min = qMin(min, pt.balance);
+            max = qMax(max, pt.balance);
+        }
     }
     if (min == std::numeric_limits<double>::max())
         return 0.0;
-    double range = timeSeriesMaxBalance() - min;
+    double range = max - min;
     return min - range * 0.05;
 }
 
 double FinchClient::timeSeriesMaxBalance() const
 {
+    double min = std::numeric_limits<double>::max();
     double max = std::numeric_limits<double>::lowest();
     for (const auto& points : m_timeSeriesData.seriesByAccount) {
-        for (const auto& pt : points)
+        for (const auto& pt : points) {
+            min = qMin(min, pt.balance);
             max = qMax(max, pt.balance);
+        }
     }
     if (max == std::numeric_limits<double>::lowest())
         return 0.0;
-    double min = std::numeric_limits<double>::max();
-    for (const auto& points : m_timeSeriesData.seriesByAccount) {
-        for (const auto& pt : points)
-            min = qMin(min, pt.balance);
-    }
     double range = max - min;
     return max + range * 0.05;
 }
