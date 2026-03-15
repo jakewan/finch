@@ -2,7 +2,7 @@
 
 ## Test Isolation
 
-Each test gets its own in-memory SQLite database via `openTestDB(t)`. Tests NEVER share database state. This eliminates ordering dependencies and enables parallel execution.
+Each test gets its own temporary on-disk SQLite database via `openTestDB(t)` (which uses `t.TempDir()` for automatic cleanup). Tests NEVER share database state. This eliminates ordering dependencies and enables parallel execution.
 
 ## Per-Component Strategy
 
