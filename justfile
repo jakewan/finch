@@ -58,6 +58,9 @@ clean:
     rm -rf app/build
     rm -rf daemon/gen
 
+# Install all components
+install: install-service install-mcp
+
 # Install systemd user service
 install-service: build-daemon
     mkdir -p ~/.local/bin
@@ -66,3 +69,8 @@ install-service: build-daemon
     cp daemon/finch.service ~/.config/systemd/user/
     systemctl --user daemon-reload
     systemctl --user enable --now finch.service
+
+# Install MCP server binary
+install-mcp: build-mcp
+    mkdir -p ~/.local/bin
+    cp mcp/finch-mcp ~/.local/bin/
