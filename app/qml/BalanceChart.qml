@@ -9,6 +9,7 @@ ColumnLayout {
     spacing: 8
 
     property var selectedAccountIds: []
+    property var dynamicSeries: []
 
     // D3 "tab10" palette — colorblind-considerate, widely used
     readonly property var colorPalette: [
@@ -43,11 +44,14 @@ ColumnLayout {
     }
 
     function rebuildSeries() {
-        chartView.removeAllSeries()
+        for (let i = 0; i < dynamicSeries.length; i++)
+            chartView.removeSeries(dynamicSeries[i])
+        dynamicSeries = []
+
         let ids = finchClient.timeSeriesAccountIds
+        let created = []
         for (let i = 0; i < ids.length; i++) {
             let accountId = ids[i]
-            // Only show series for currently selected accounts
             if (selectedAccountIds.indexOf(accountId) === -1)
                 continue
             let name = accountId
@@ -61,7 +65,9 @@ ColumnLayout {
                                                  name, axisX, axisY)
             series.color = root.accountColor(accountId)
             finchClient.populateSeries(series, accountId)
+            created.push(series)
         }
+        dynamicSeries = created
     }
 
     Timer {
@@ -138,6 +144,7 @@ ColumnLayout {
 
         ColumnLayout {
             Layout.preferredWidth: 180
+            Layout.maximumWidth: 180
             Layout.fillHeight: true
             spacing: 4
 
@@ -182,6 +189,7 @@ ColumnLayout {
                 visible: !finchClient.timeSeriesEmpty
                 antialiasing: true
                 legend.visible: true
+                theme: ChartView.ChartThemeLight
 
                 DateTimeAxis {
                     id: axisX
@@ -191,6 +199,13 @@ ColumnLayout {
                 ValueAxis {
                     id: axisY
                     labelFormat: "$%.0f"
+                }
+
+                LineSeries {
+                    id: anchorSeries
+                    axisX: axisX
+                    axisY: axisY
+                    visible: false
                 }
             }
 
