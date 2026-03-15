@@ -594,6 +594,115 @@ func TestTransactionTools(t *testing.T) {
 		})
 	})
 
+	t.Run("list_transactions", func(t *testing.T) {
+		handler := newListTransactionsHandler(client)
+
+		t.Run("returns_empty_list_when_no_transactions", func(t *testing.T) {
+			freshClient := startTestBackend(t)
+			emptyAcctID := createTestAccount(t, freshClient)
+			emptyHandler := newListTransactionsHandler(freshClient)
+
+			_, out, err := emptyHandler(ctx, nil, ListTransactionsInput{
+				AccountID: emptyAcctID,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(out.Transactions) != 0 {
+				t.Fatalf("expected 0 transactions, got %d", len(out.Transactions))
+			}
+		})
+
+		t.Run("returns_recorded_transactions", func(t *testing.T) {
+			recHandler := newRecordTransactionHandler(client)
+			_, _, err := recHandler(ctx, nil, RecordTransactionInput{
+				AccountID: accountID,
+				Date:      "2025-06-01",
+				Amount:    -7500,
+				Name:      "List Test Txn 1",
+				Status:    "RECONCILED",
+			})
+			if err != nil {
+				t.Fatalf("record txn 1: %v", err)
+			}
+			_, _, err = recHandler(ctx, nil, RecordTransactionInput{
+				AccountID: accountID,
+				Date:      "2025-06-02",
+				Amount:    -3000,
+				Name:      "List Test Txn 2",
+				Status:    "SCHEDULED",
+			})
+			if err != nil {
+				t.Fatalf("record txn 2: %v", err)
+			}
+
+			_, out, err := handler(ctx, nil, ListTransactionsInput{
+				AccountID: accountID,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(out.Transactions) < 2 {
+				t.Fatalf("expected at least 2 transactions, got %d", len(out.Transactions))
+			}
+		})
+
+		t.Run("maps_all_output_fields", func(t *testing.T) {
+			ruleID := createTestRule(t, client, accountID)
+			recHandler := newRecordTransactionHandler(client)
+			_, _, err := recHandler(ctx, nil, RecordTransactionInput{
+				AccountID:       accountID,
+				Date:            "2025-07-01",
+				Amount:          -150000,
+				Name:            "Mapped Txn",
+				Description:     "Full field test",
+				Status:          "RECONCILED",
+				RecurringRuleID: ruleID,
+			})
+			if err != nil {
+				t.Fatalf("record txn: %v", err)
+			}
+
+			_, out, err := handler(ctx, nil, ListTransactionsInput{
+				AccountID: accountID,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			found := false
+			for _, txn := range out.Transactions {
+				if txn.Name == "Mapped Txn" {
+					found = true
+					if txn.AccountID != accountID {
+						t.Fatalf("expected account_id %q, got %q", accountID, txn.AccountID)
+					}
+					if txn.Date != "2025-07-01" {
+						t.Fatalf("expected date 2025-07-01, got %q", txn.Date)
+					}
+					if txn.Amount != -150000 {
+						t.Fatalf("expected amount -150000, got %d", txn.Amount)
+					}
+					if txn.Description != "Full field test" {
+						t.Fatalf("expected description 'Full field test', got %q", txn.Description)
+					}
+					if txn.RecurringRuleID != ruleID {
+						t.Fatalf("expected recurring_rule_id %q, got %q", ruleID, txn.RecurringRuleID)
+					}
+					if txn.Status != "TRANSACTION_STATUS_RECONCILED" {
+						t.Fatalf("expected status TRANSACTION_STATUS_RECONCILED, got %q", txn.Status)
+					}
+					if txn.ID == "" {
+						t.Fatal("expected non-empty transaction ID")
+					}
+				}
+			}
+			if !found {
+				t.Fatal("expected to find 'Mapped Txn' in list")
+			}
+		})
+	})
+
 	t.Run("update_transaction_status", func(t *testing.T) {
 		handler := newUpdateTransactionStatusHandler(client)
 

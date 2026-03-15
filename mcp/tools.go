@@ -57,6 +57,11 @@ func registerTools(server *mcp.Server, client finchv1.FinchServiceClient) {
 	}, newRecordTransactionHandler(client))
 
 	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_transactions",
+		Description: "List all recorded transactions for an account.",
+	}, newListTransactionsHandler(client))
+
+	mcp.AddTool(server, &mcp.Tool{
 		Name:        "update_transaction_status",
 		Description: "Update the status of a transaction (PROJECTED → SCHEDULED → RECONCILED).",
 	}, newUpdateTransactionStatusHandler(client))
@@ -421,6 +426,31 @@ func newRecordTransactionHandler(client finchv1.FinchServiceClient) func(context
 		return nil, RecordTransactionOutput{
 			Transaction: protoTxnToInfo(resp.Transaction),
 		}, nil
+	}
+}
+
+// ListTransactions
+
+type ListTransactionsInput struct {
+	AccountID string `json:"account_id" jsonschema:"UUID of the account"`
+}
+type ListTransactionsOutput struct {
+	Transactions []TransactionInfo `json:"transactions"`
+}
+
+func newListTransactionsHandler(client finchv1.FinchServiceClient) func(context.Context, *mcp.CallToolRequest, ListTransactionsInput) (*mcp.CallToolResult, ListTransactionsOutput, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, input ListTransactionsInput) (*mcp.CallToolResult, ListTransactionsOutput, error) {
+		resp, err := client.ListTransactions(ctx, &finchv1.ListTransactionsRequest{
+			AccountId: input.AccountID,
+		})
+		if err != nil {
+			return nil, ListTransactionsOutput{}, fmt.Errorf("list transactions: %w", err)
+		}
+		txns := make([]TransactionInfo, len(resp.Transactions))
+		for i, t := range resp.Transactions {
+			txns[i] = protoTxnToInfo(t)
+		}
+		return nil, ListTransactionsOutput{Transactions: txns}, nil
 	}
 }
 
