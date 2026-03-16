@@ -62,18 +62,22 @@ clean:
 install: install-service install-mcp
 
 # Install systemd user service
+# Uses cp+mv (atomic replacement) so the install succeeds even while the
+# daemon binary is running — Linux prevents overwriting a running binary
+# with cp alone ("text file busy"), but mv replaces the directory entry
+# while the running process retains its file descriptor to the old inode.
 install-service: build-daemon
     mkdir -p ~/.local/bin
-    cp daemon/finch-daemon ~/.local/bin/
+    cp daemon/finch-daemon ~/.local/bin/finch-daemon.tmp && mv ~/.local/bin/finch-daemon.tmp ~/.local/bin/finch-daemon
     mkdir -p ~/.config/systemd/user
     cp daemon/finch.service ~/.config/systemd/user/
     systemctl --user daemon-reload
     systemctl --user enable --now finch.service
 
-# Install MCP server binary
+# Install MCP server binary (see install-service for cp+mv rationale)
 install-mcp: build-mcp
     mkdir -p ~/.local/bin
-    cp mcp/finch-mcp ~/.local/bin/
+    cp mcp/finch-mcp ~/.local/bin/finch-mcp.tmp && mv ~/.local/bin/finch-mcp.tmp ~/.local/bin/finch-mcp
 
 # Install git hooks via lefthook
 hooks:

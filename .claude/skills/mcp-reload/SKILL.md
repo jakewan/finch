@@ -16,7 +16,7 @@ The Finch MCP server is a user-scoped stdio server (`finch-mcp` binary on PATH, 
    - **MCP-only** — only `mcp/` files changed
    - **Full stack** — any of `proto/`, `core/`, or `daemon/` files also changed
 
-2. **Build and install:**
+2. **Build, install, and restart** — the install targets use atomic replacement (`cp` + `mv`), so they succeed even while binaries are running:
 
    MCP-only changes:
    ```bash
