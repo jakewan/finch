@@ -2,6 +2,7 @@ package finchd
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -437,6 +438,9 @@ func (s *Server) GetBalanceTimeSeries(ctx context.Context, req *finchv1.GetBalan
 func accountError(op string, err error) error {
 	if strings.Contains(err.Error(), "not found") {
 		return status.Errorf(codes.NotFound, "%s: %v", op, err)
+	}
+	if errors.Is(err, core.ErrNoChange) {
+		return status.Errorf(codes.InvalidArgument, "%s: %v", op, err)
 	}
 	return status.Errorf(codes.Internal, "%s: %v", op, err)
 }

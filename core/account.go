@@ -60,6 +60,10 @@ type AccountTypeChangedPayload struct {
 	NewType int `json:"new_type"`
 }
 
+// ErrNoChange indicates that an update was requested but the new value
+// matches the current value.
+var ErrNoChange = errors.New("no change")
+
 func ValidAccountType(t AccountType) bool {
 	return t >= AccountTypeChecking && t <= AccountTypeBrokerage
 }
@@ -157,7 +161,7 @@ func (db *DB) RenameAccount(ctx context.Context, accountID, newName string) erro
 
 	if oldName == newName {
 		_ = tx.Rollback()
-		return errors.New("new name is the same as the current name")
+		return fmt.Errorf("new name is the same as the current name: %w", ErrNoChange)
 	}
 
 	payload, err := json.Marshal(AccountRenamedPayload{
@@ -213,7 +217,7 @@ func (db *DB) UpdateAccountType(ctx context.Context, accountID string, newType A
 
 	if AccountType(oldType) == newType {
 		_ = tx.Rollback()
-		return errors.New("new type is the same as the current type")
+		return fmt.Errorf("new type is the same as the current type: %w", ErrNoChange)
 	}
 
 	payload, err := json.Marshal(AccountTypeChangedPayload{

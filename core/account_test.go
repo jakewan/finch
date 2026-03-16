@@ -3,6 +3,7 @@ package core_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/jakewan/finch/core"
@@ -166,6 +167,8 @@ func TestRenameAccountValidation(t *testing.T) {
 	}
 	if err := db.RenameAccount(ctx, acct.ID, "Test"); err == nil {
 		t.Fatal("expected error for same name")
+	} else if !errors.Is(err, core.ErrNoChange) {
+		t.Fatalf("expected ErrNoChange, got: %v", err)
 	}
 }
 
@@ -236,6 +239,8 @@ func TestUpdateAccountTypeValidation(t *testing.T) {
 	}
 	if err := db.UpdateAccountType(ctx, acct.ID, core.AccountTypeChecking); err == nil {
 		t.Fatal("expected error for same type")
+	} else if !errors.Is(err, core.ErrNoChange) {
+		t.Fatalf("expected ErrNoChange, got: %v", err)
 	}
 }
 
