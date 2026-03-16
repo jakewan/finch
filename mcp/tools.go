@@ -32,6 +32,16 @@ func registerTools(server *mcp.Server, client finchv1.FinchServiceClient) {
 	}, newGetAccountHistoryHandler(client))
 
 	mcp.AddTool(server, &mcp.Tool{
+		Name:        "rename_account",
+		Description: "Rename an existing financial account.",
+	}, newRenameAccountHandler(client))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "update_account_type",
+		Description: "Change the type of an existing financial account.",
+	}, newUpdateAccountTypeHandler(client))
+
+	mcp.AddTool(server, &mcp.Tool{
 		Name:        "create_recurring_rule",
 		Description: "Create a recurring transaction rule (template). Amount is in cents. Frequency: WEEKLY, BIWEEKLY, SEMI_MONTHLY, MONTHLY, YEARLY.",
 	}, newCreateRecurringRuleHandler(client))
@@ -230,6 +240,59 @@ func newGetAccountHistoryHandler(client finchv1.FinchServiceClient) func(context
 			return nil, GetAccountHistoryOutput{}, fmt.Errorf("get account history: %w", err)
 		}
 		return nil, GetAccountHistoryOutput{Events: protoEventsToInfo(resp.Events)}, nil
+	}
+}
+
+// RenameAccount
+
+type RenameAccountInput struct {
+	AccountID string `json:"account_id" jsonschema:"the UUID of the account to rename"`
+	NewName   string `json:"new_name" jsonschema:"the new name for the account"`
+}
+type RenameAccountOutput struct{}
+
+func newRenameAccountHandler(client finchv1.FinchServiceClient) func(context.Context, *mcp.CallToolRequest, RenameAccountInput) (*mcp.CallToolResult, RenameAccountOutput, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, input RenameAccountInput) (*mcp.CallToolResult, RenameAccountOutput, error) {
+		_, err := client.RenameAccount(ctx, &finchv1.RenameAccountRequest{
+			AccountId: input.AccountID,
+			NewName:   input.NewName,
+		})
+		if err != nil {
+			return nil, RenameAccountOutput{}, fmt.Errorf("rename account: %w", err)
+		}
+		return nil, RenameAccountOutput{}, nil
+	}
+}
+
+// UpdateAccountType
+
+type UpdateAccountTypeInput struct {
+	AccountID string `json:"account_id" jsonschema:"the UUID of the account"`
+	NewType   string `json:"new_type" jsonschema:"account type: CHECKING, SAVINGS, CREDIT_CARD, AUTO_LOAN, PERSONAL_LOAN, LINE_OF_CREDIT, or BROKERAGE"`
+}
+type UpdateAccountTypeOutput struct{}
+
+func newUpdateAccountTypeHandler(client finchv1.FinchServiceClient) func(context.Context, *mcp.CallToolRequest, UpdateAccountTypeInput) (*mcp.CallToolResult, UpdateAccountTypeOutput, error) {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, input UpdateAccountTypeInput) (*mcp.CallToolResult, UpdateAccountTypeOutput, error) {
+		normalized := strings.ToUpper(strings.TrimSpace(input.NewType))
+		normalized = strings.TrimPrefix(normalized, "ACCOUNT_TYPE_")
+		acctType, ok := accountTypeMap[normalized]
+		if !ok {
+			valid := make([]string, 0, len(accountTypeMap))
+			for k := range accountTypeMap {
+				valid = append(valid, k)
+			}
+			slices.Sort(valid)
+			return nil, UpdateAccountTypeOutput{}, fmt.Errorf("unknown account type %q; valid types: %s", input.NewType, strings.Join(valid, ", "))
+		}
+		_, err := client.UpdateAccountType(ctx, &finchv1.UpdateAccountTypeRequest{
+			AccountId: input.AccountID,
+			NewType:   acctType,
+		})
+		if err != nil {
+			return nil, UpdateAccountTypeOutput{}, fmt.Errorf("update account type: %w", err)
+		}
+		return nil, UpdateAccountTypeOutput{}, nil
 	}
 }
 

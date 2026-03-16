@@ -9,6 +9,8 @@ service FinchService {
   rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
   rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
   rpc GetAccountHistory(GetAccountHistoryRequest) returns (GetAccountHistoryResponse);
+  rpc RenameAccount(RenameAccountRequest) returns (RenameAccountResponse);
+  rpc UpdateAccountType(UpdateAccountTypeRequest) returns (UpdateAccountTypeResponse);
   rpc CreateRecurringRule(CreateRecurringRuleRequest) returns (CreateRecurringRuleResponse);
   rpc ListRecurringRules(ListRecurringRulesRequest) returns (ListRecurringRulesResponse);
   rpc UpdateRecurringRuleAmount(UpdateRecurringRuleAmountRequest) returns (UpdateRecurringRuleAmountResponse);
@@ -81,6 +83,20 @@ message AccountEvent {
 message GetAccountHistoryResponse {
   repeated AccountEvent events = 1;
 }
+
+message RenameAccountRequest {
+  string account_id = 1;
+  string new_name = 2;
+}
+
+message RenameAccountResponse {}
+
+message UpdateAccountTypeRequest {
+  string account_id = 1;
+  AccountType new_type = 2;
+}
+
+message UpdateAccountTypeResponse {}
 
 // Recurring rules
 

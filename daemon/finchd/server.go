@@ -2,6 +2,7 @@ package finchd
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -74,6 +75,32 @@ func (s *Server) GetAccountHistory(ctx context.Context, req *finchv1.GetAccountH
 		return nil, status.Errorf(codes.Internal, "get account history: %v", err)
 	}
 	return eventsToProto(events), nil
+}
+
+func (s *Server) RenameAccount(ctx context.Context, req *finchv1.RenameAccountRequest) (*finchv1.RenameAccountResponse, error) {
+	if strings.TrimSpace(req.AccountId) == "" {
+		return nil, status.Error(codes.InvalidArgument, "account_id must not be empty")
+	}
+	if strings.TrimSpace(req.NewName) == "" {
+		return nil, status.Error(codes.InvalidArgument, "new_name must not be empty")
+	}
+	if err := s.db.RenameAccount(ctx, req.AccountId, req.NewName); err != nil {
+		return nil, accountError("rename account", err)
+	}
+	return &finchv1.RenameAccountResponse{}, nil
+}
+
+func (s *Server) UpdateAccountType(ctx context.Context, req *finchv1.UpdateAccountTypeRequest) (*finchv1.UpdateAccountTypeResponse, error) {
+	if strings.TrimSpace(req.AccountId) == "" {
+		return nil, status.Error(codes.InvalidArgument, "account_id must not be empty")
+	}
+	if req.NewType == finchv1.AccountType_ACCOUNT_TYPE_UNSPECIFIED {
+		return nil, status.Error(codes.InvalidArgument, "new_type must be specified")
+	}
+	if err := s.db.UpdateAccountType(ctx, req.AccountId, core.AccountType(req.NewType)); err != nil {
+		return nil, accountError("update account type", err)
+	}
+	return &finchv1.UpdateAccountTypeResponse{}, nil
 }
 
 func (s *Server) CreateRecurringRule(ctx context.Context, req *finchv1.CreateRecurringRuleRequest) (*finchv1.CreateRecurringRuleResponse, error) {
@@ -405,6 +432,17 @@ func (s *Server) GetBalanceTimeSeries(ctx context.Context, req *finchv1.GetBalan
 		resp.Points = append(resp.Points, tp)
 	}
 	return resp, nil
+}
+
+// accountError maps core account errors to gRPC status codes.
+func accountError(op string, err error) error {
+	if strings.Contains(err.Error(), "not found") {
+		return status.Errorf(codes.NotFound, "%s: %v", op, err)
+	}
+	if errors.Is(err, core.ErrNoChange) {
+		return status.Errorf(codes.InvalidArgument, "%s: %v", op, err)
+	}
+	return status.Errorf(codes.Internal, "%s: %v", op, err)
 }
 
 // ruleError maps core recurring rule errors to gRPC status codes.

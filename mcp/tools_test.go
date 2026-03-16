@@ -249,6 +249,147 @@ func TestAccountTools(t *testing.T) {
 	})
 }
 
+// --- Account Mutation Tools ---
+
+func TestAccountMutationTools(t *testing.T) {
+	client := startTestBackend(t)
+	ctx := context.Background()
+
+	t.Run("rename_account", func(t *testing.T) {
+		renameHandler := newRenameAccountHandler(client)
+		listHandler := newListAccountsHandler(client)
+
+		t.Run("renames_account_successfully", func(t *testing.T) {
+			freshClient := startTestBackend(t)
+			createHandler := newCreateAccountHandler(freshClient)
+			renameH := newRenameAccountHandler(freshClient)
+			listH := newListAccountsHandler(freshClient)
+
+			_, created, err := createHandler(ctx, nil, CreateAccountInput{Name: "Old Name", Type: "CHECKING"})
+			if err != nil {
+				t.Fatalf("create: %v", err)
+			}
+
+			_, _, err = renameH(ctx, nil, RenameAccountInput{AccountID: created.Account.ID, NewName: "New Name"})
+			if err != nil {
+				t.Fatalf("rename: %v", err)
+			}
+
+			_, listed, err := listH(ctx, nil, ListAccountsInput{})
+			if err != nil {
+				t.Fatalf("list: %v", err)
+			}
+			if len(listed.Accounts) != 1 || listed.Accounts[0].Name != "New Name" {
+				t.Fatalf("expected renamed account 'New Name', got %+v", listed.Accounts)
+			}
+		})
+
+		t.Run("rejects_empty_name", func(t *testing.T) {
+			accountID := createTestAccount(t, client)
+			_, _, err := renameHandler(ctx, nil, RenameAccountInput{AccountID: accountID, NewName: ""})
+			if err == nil {
+				t.Fatal("expected error for empty name")
+			}
+		})
+
+		t.Run("verifies_event_history", func(t *testing.T) {
+			freshClient := startTestBackend(t)
+			createHandler := newCreateAccountHandler(freshClient)
+			renameH := newRenameAccountHandler(freshClient)
+			historyH := newGetAccountHistoryHandler(freshClient)
+
+			_, created, err := createHandler(ctx, nil, CreateAccountInput{Name: "Before", Type: "SAVINGS"})
+			if err != nil {
+				t.Fatalf("create: %v", err)
+			}
+
+			_, _, err = renameH(ctx, nil, RenameAccountInput{AccountID: created.Account.ID, NewName: "After"})
+			if err != nil {
+				t.Fatalf("rename: %v", err)
+			}
+
+			_, history, err := historyH(ctx, nil, GetAccountHistoryInput{AccountID: created.Account.ID})
+			if err != nil {
+				t.Fatalf("history: %v", err)
+			}
+			if len(history.Events) != 2 {
+				t.Fatalf("expected 2 events, got %d", len(history.Events))
+			}
+			if history.Events[1].EventType != "AccountRenamed" {
+				t.Fatalf("expected AccountRenamed, got %q", history.Events[1].EventType)
+			}
+		})
+
+		_ = listHandler
+	})
+
+	t.Run("update_account_type", func(t *testing.T) {
+		updateHandler := newUpdateAccountTypeHandler(client)
+		listHandler := newListAccountsHandler(client)
+
+		t.Run("changes_type_successfully", func(t *testing.T) {
+			freshClient := startTestBackend(t)
+			createHandler := newCreateAccountHandler(freshClient)
+			updateH := newUpdateAccountTypeHandler(freshClient)
+			listH := newListAccountsHandler(freshClient)
+
+			_, created, err := createHandler(ctx, nil, CreateAccountInput{Name: "My Account", Type: "CHECKING"})
+			if err != nil {
+				t.Fatalf("create: %v", err)
+			}
+
+			_, _, err = updateH(ctx, nil, UpdateAccountTypeInput{AccountID: created.Account.ID, NewType: "SAVINGS"})
+			if err != nil {
+				t.Fatalf("update type: %v", err)
+			}
+
+			_, listed, err := listH(ctx, nil, ListAccountsInput{})
+			if err != nil {
+				t.Fatalf("list: %v", err)
+			}
+			if len(listed.Accounts) != 1 || !strings.Contains(listed.Accounts[0].Type, "SAVINGS") {
+				t.Fatalf("expected SAVINGS type, got %+v", listed.Accounts)
+			}
+		})
+
+		t.Run("normalizes_input", func(t *testing.T) {
+			cases := []string{"savings", "ACCOUNT_TYPE_SAVINGS", "  SAVINGS  "}
+			for _, input := range cases {
+				t.Run(input, func(t *testing.T) {
+					fc := startTestBackend(t)
+					createH := newCreateAccountHandler(fc)
+					updateH := newUpdateAccountTypeHandler(fc)
+
+					_, created, err := createH(ctx, nil, CreateAccountInput{Name: "Norm Test", Type: "CHECKING"})
+					if err != nil {
+						t.Fatalf("create: %v", err)
+					}
+					_, _, err = updateH(ctx, nil, UpdateAccountTypeInput{AccountID: created.Account.ID, NewType: input})
+					if err != nil {
+						t.Fatalf("input %q: unexpected error: %v", input, err)
+					}
+				})
+			}
+		})
+
+		t.Run("rejects_unknown_type_with_valid_options", func(t *testing.T) {
+			accountID := createTestAccount(t, client)
+			_, _, err := updateHandler(ctx, nil, UpdateAccountTypeInput{AccountID: accountID, NewType: "INVALID"})
+			if err == nil {
+				t.Fatal("expected error for unknown type")
+			}
+			if !strings.Contains(err.Error(), "unknown account type") {
+				t.Fatalf("expected 'unknown account type' in error, got: %s", err.Error())
+			}
+			if !strings.Contains(err.Error(), "CHECKING") {
+				t.Fatalf("expected valid options in error, got: %s", err.Error())
+			}
+		})
+
+		_ = listHandler
+	})
+}
+
 // --- Recurring Rule Tools ---
 
 func TestRecurringRuleTools(t *testing.T) {
