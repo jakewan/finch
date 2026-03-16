@@ -149,9 +149,8 @@ func (db *DB) RenameAccount(ctx context.Context, accountID, newName string) erro
 	}
 
 	var oldName string
-	var acctType int
 	if err := tx.QueryRowContext(ctx,
-		"SELECT name, type FROM accounts WHERE id = ?", accountID).Scan(&oldName, &acctType); err != nil {
+		"SELECT name FROM accounts WHERE id = ?", accountID).Scan(&oldName); err != nil {
 		_ = tx.Rollback()
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("account %s not found", accountID)
@@ -204,10 +203,9 @@ func (db *DB) UpdateAccountType(ctx context.Context, accountID string, newType A
 		return fmt.Errorf("begin tx: %w", err)
 	}
 
-	var name string
 	var oldType int
 	if err := tx.QueryRowContext(ctx,
-		"SELECT name, type FROM accounts WHERE id = ?", accountID).Scan(&name, &oldType); err != nil {
+		"SELECT type FROM accounts WHERE id = ?", accountID).Scan(&oldType); err != nil {
 		_ = tx.Rollback()
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("account %s not found", accountID)
