@@ -41,6 +41,7 @@ For each issue from Command A, assign a component in two passes:
 |---|---|
 | `app-independence` | **app** |
 | `github_actions` | **infra** |
+| `developer-experience` | **dx** |
 
 If an issue matches a label rule, assign that component and skip Pass 2 for that issue.
 
@@ -97,7 +98,7 @@ If no open milestones exist, state: "No active milestones."
 
 Header: `## Component Inventory`
 
-For each component in dependency order (`core`, `api`, `mcp`, `app`, `infra`):
+For each component in dependency order (`core`, `api`, `mcp`, `app`, `infra`, `dx`):
 
 ```markdown
 ### component — N open

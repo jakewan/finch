@@ -48,6 +48,7 @@ Use the same two-pass heuristic as `/project-summary`:
 |---|---|
 | `app-independence` | **app** |
 | `github_actions` | **infra** |
+| `developer-experience` | **dx** |
 
 If an issue matches a label rule, assign that component and skip Pass 2 for that issue.
 
@@ -75,7 +76,7 @@ Header: `## Issue Quality Audit`
 
 Evaluate all open issues against quality heuristics. Show "None" for empty categories.
 
-**Needs decomposition** — issues with 3+ checklist items (`- [ ]` or `- [x]`) or 4+ numbered list items with substantive content. These are candidates for breaking into sub-issues.
+**Needs decomposition** — issues with 3+ checklist items (`- [ ]` or `- [x]`) or 4+ numbered list items with substantive content. These are candidates for breaking into sub-issues. Exclude checklists that appear under an "Acceptance criteria" heading — those are verification steps, not work items.
 
 **Missing description** — body is null, empty, or under 30 characters. An issue without a description lacks clear purpose.
 
@@ -118,12 +119,13 @@ Build a summary table of issue distribution across components, using dependency 
 ```markdown
 | Component    | Active | % of Backlog | Signal      |
 | ------------ | ------ | ------------ | ----------- |
-| core         | 5      | 38%          |             |
-| api          | 1      | 8%           |             |
+| core         | 5      | 33%          |             |
+| api          | 1      | 7%           |             |
 | mcp          | 0      | 0%           | starved     |
-| app          | 5      | 38%          |             |
-| infra        | 1      | 8%           |             |
-| (unclassified) | 1   | 8%           | needs label |
+| app          | 5      | 33%          |             |
+| infra        | 1      | 7%           |             |
+| dx           | 2      | 13%          |             |
+| (unclassified) | 1   | 7%           | needs label |
 ```
 
 - **% of Backlog** = active count / total active count across all components
