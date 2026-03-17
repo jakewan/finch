@@ -33,17 +33,29 @@ gh pr list --state open --json number,title,headRefName,statusCheckRollup,update
 
 ## Step 2: Classify Each Issue by Component
 
-For each issue from Command A, assign a component using this heuristic (case-insensitive match on title):
+For each issue from Command A, assign a component in two passes:
 
-| Component | Title keywords | Label match |
-|---|---|---|
-| **core** | core, domain, event, migration, database, sqlite, accounting, transaction, transfer, balance, recurring | — |
-| **api** | proto, grpc, rpc, api, daemon, handler | — |
-| **mcp** | mcp, tool | — |
-| **app** | app, qt, qml, ui, chart, visual | `app-independence` label |
-| **infra** | ci, build, install, action, workflow | `github_actions` label |
+### Pass 1: Label match (takes precedence)
 
-- Match in priority order (core first). An issue matching multiple components goes to the first match.
+| Label | Component |
+|---|---|
+| `app-independence` | **app** |
+| `github_actions` | **infra** |
+
+If an issue matches a label rule, assign that component and skip Pass 2 for that issue.
+
+### Pass 2: Title keyword heuristic (case-insensitive)
+
+For remaining issues, match title keywords in this priority order (first match wins):
+
+| Component | Title keywords |
+|---|---|
+| **core** | core, domain, event, migration, database, sqlite, accounting, account, transaction, transfer, balance, recurring, debt, interest |
+| **api** | proto, grpc, rpc, api, daemon, handler, reflection |
+| **mcp** | mcp |
+| **app** | app, qt, qml, ui, chart, visual, cash flow |
+| **infra** | ci, build, install, action, workflow, recipe |
+
 - Issues matching none are **unclassified** (surfaced in hygiene signals).
 - This heuristic can be replaced with `component:*` labels if adopted later.
 
