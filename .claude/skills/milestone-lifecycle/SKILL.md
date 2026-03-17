@@ -75,7 +75,7 @@ Issues matching none are **unclassified**.
 
 Based on Command A results. **Important**: Command A's `open_issues`/`closed_issues` counts can be stale — always use Command B (the issue list) as the authoritative source for actual issue counts in a milestone.
 
-- **No open milestones** → **Cold-start mode**. Skip Steps 3–4, proceed to Step 5 with cold-start framing.
+- **No open milestones** → **Cold-start mode**. Skip Step 3, proceed to Step 4 (gate assessment applies regardless of milestone state).
 - **One open milestone** → Use it as the active milestone. Proceed to Step 3.
 - **Multiple open milestones** → Present a numbered list with progress counts and ask the user which milestone to evaluate. Proceed to Step 3 with the chosen milestone.
 
