@@ -24,6 +24,20 @@ Qt Quick Controls types mark many properties as FINAL. NEVER declare custom prop
 
 **`attachAxis` not available in QML:** `QAbstractSeries::attachAxis` is not exposed on `DeclarativeLineSeries`. Pass axes as arguments to `ChartView.createSeries(type, name, axisX, axisY)` instead.
 
+## Desktop Integration (Wayland)
+
+On Wayland the compositor does not let a client set its own taskbar/window icon — it derives the icon from the window's `app_id`, maps that to a `.desktop` file, and reads that file's `Icon=` field. Qt takes the `app_id` from `QGuiApplication::setDesktopFileName()`; when unset it defaults to the executable name.
+
+So the taskbar/window icon resolves only when three names line up:
+
+- the advertised `app_id` — `setDesktopFileName("finch")` in `main.cpp`;
+- the installed desktop entry filename — `finch.desktop`;
+- that entry's `Icon=` value — `Icon=finch`, resolved against a themed icon (e.g. `hicolor/scalable/apps/finch.svg`).
+
+The binary is `finch-app`, so the default `app_id` (`finch-app`) would not match `finch.desktop` — set it explicitly. `setWindowIcon(QIcon::fromTheme("finch"))` covers the in-window and X11 icon.
+
+After installing or changing a desktop entry or icon, a running Plasma session may keep a stale in-memory cache; a logout/login is the reliable refresh. Avoid restarting plasmashell as a shortcut — on a Wayland session it can destabilize the whole session.
+
 ## Build and Test
 
 Build: `just build-app` (or `cmake -S app -B app/build && cmake --build app/build`).
