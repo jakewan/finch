@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Finch">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f9e7e"/>
+      <stop offset="1" stop-color="#1f6f63"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+
+  <!-- rising projection line (behind the bird) -->
+  <g fill="none" stroke="#ffd166" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="56,200 96,184 132,196 200,148"/>
+  </g>
+  <circle cx="200" cy="148" r="10" fill="#ffd166"/>
+
+  <!-- finch silhouette, perched and facing right -->
+  <g fill="#f7f3e3">
+    <path d="M52 150
+             C58 132 76 126 96 130
+             C98 104 122 84 150 84
+             C176 84 196 102 196 128
+             C196 154 174 174 144 174
+             C120 174 100 164 92 150
+             C80 160 64 162 52 150 Z"/>
+    <!-- beak -->
+    <path d="M194 116 l30 10 -30 12 z"/>
+    <!-- tail -->
+    <path d="M96 148 l-44 26 18 4 30 -16 z"/>
+  </g>
+
+  <!-- wing accent -->
+  <path d="M104 130 C128 124 156 128 176 140 C152 158 120 156 100 142 Z" fill="#2f9e7e"/>
+  <!-- eye -->
+  <circle cx="172" cy="116" r="7" fill="#1f6f63"/>
+</svg>

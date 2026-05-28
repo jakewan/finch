@@ -79,6 +79,18 @@ install-mcp: build-mcp
     mkdir -p ~/.local/bin
     cp mcp/finch-mcp ~/.local/bin/finch-mcp.tmp && mv ~/.local/bin/finch-mcp.tmp ~/.local/bin/finch-mcp
 
+# Uses cp+mv atomic replacement (see install-service for rationale).
+# Install the Qt desktop app: binary, desktop entry, and icon (Linux / XDG)
+install-app: build-app
+    mkdir -p ~/.local/bin
+    cp app/build/finch-app ~/.local/bin/finch-app.tmp && mv ~/.local/bin/finch-app.tmp ~/.local/bin/finch-app
+    mkdir -p ~/.local/share/applications
+    cp app/finch.desktop ~/.local/share/applications/
+    mkdir -p ~/.local/share/icons/hicolor/scalable/apps
+    cp app/finch.svg ~/.local/share/icons/hicolor/scalable/apps/finch.svg
+    touch ~/.local/share/icons/hicolor
+    update-desktop-database ~/.local/share/applications
+
 # Install git hooks via lefthook
 hooks:
     lefthook install

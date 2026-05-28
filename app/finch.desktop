@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Finch
+GenericName=Personal Finance Projection
+Comment=Project and track personal finances
+Exec=finch-app
+Icon=finch
+Terminal=false
+Categories=Office;Finance;Qt;
+Keywords=finance;budget;projection;money;
+StartupNotify=true

@@ -56,6 +56,14 @@ just install-mcp
 
 This builds the MCP binary and copies it to `~/.local/bin/`.
 
+### Install the desktop app
+
+```bash
+just install-app
+```
+
+This builds the Qt app, copies the `finch-app` binary to `~/.local/bin/`, installs the desktop entry to `~/.local/share/applications/`, and the icon to `~/.local/share/icons/hicolor/scalable/apps/`. Finch then appears in the desktop application launcher (e.g. KDE Plasma's Kickoff). The app connects to the daemon, so install and start the service first.
+
 ### Manual
 
 ```bash

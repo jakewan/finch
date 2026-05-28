@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QUrl>
@@ -25,6 +26,10 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     app.setApplicationName("Finch");
     app.setApplicationVersion("0.1.0");
+    // Wayland derives a window's app_id from the desktop file name; matching it to
+    // finch.desktop is what lets the compositor resolve the taskbar/window icon.
+    app.setDesktopFileName(QStringLiteral("finch"));
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("finch")));
 
     qmlRegisterUncreatableType<FinchClient>("Finch", 1, 0, "FinchClient",
                                             "FinchClient is not creatable from QML");
