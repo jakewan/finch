@@ -89,7 +89,8 @@ install-app: build-app
     mkdir -p ~/.local/share/icons/hicolor/scalable/apps
     cp app/finch.svg ~/.local/share/icons/hicolor/scalable/apps/finch.svg
     touch ~/.local/share/icons/hicolor
-    update-desktop-database ~/.local/share/applications
+    # desktop-file-utils may be absent on minimal systems; skip rather than fail the install
+    if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database ~/.local/share/applications; fi
 
 # Install git hooks via lefthook
 hooks:
