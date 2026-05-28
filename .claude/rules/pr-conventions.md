@@ -26,7 +26,7 @@ Avoid:
 Conventional Commits: `type(scope): subject`.
 
 - **Types**: `feat`, `fix`, `refactor`, `docs`, `build`, `ci`, `test`, `chore`.
-- **Scopes** (this project's layers): `core`, `daemon`, `mcp`, `api`, `proto`, `app`, `skills`, `rules`, `ci`, `build`, `deps`.
+- **Scopes** (this project's areas): `core`, `daemon`, `mcp`, `api`, `proto`, `app`, `dx`, `skills`, `rules`, `ci`, `build`, `deps`. `dx` covers developer-experience work, mirroring the component the planning skills classify by.
 - **Body**: prose explaining *why* the change was made — the motivation, constraint, or problem it solves — not a restatement of the diff.
 - **Issue references**: `Closes #N` (or `Related to #N`); repeat the keyword per issue.
 
