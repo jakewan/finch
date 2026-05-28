@@ -268,15 +268,15 @@ func (db *DB) UpdateRecurringRuleAmount(ctx context.Context, ruleID string, newA
 
 // PauseRecurringRule marks a rule as paused.
 func (db *DB) PauseRecurringRule(ctx context.Context, ruleID string) error {
-	return db.setRecurringRulePaused(ctx, ruleID, true, EventRecurringRulePaused)
+	return db.setRecurringRulePaused(ctx, ruleID, true, EventRecurringRulePaused, RecurringRulePausedPayload{})
 }
 
 // ResumeRecurringRule marks a rule as active.
 func (db *DB) ResumeRecurringRule(ctx context.Context, ruleID string) error {
-	return db.setRecurringRulePaused(ctx, ruleID, false, EventRecurringRuleResumed)
+	return db.setRecurringRulePaused(ctx, ruleID, false, EventRecurringRuleResumed, RecurringRuleResumedPayload{})
 }
 
-func (db *DB) setRecurringRulePaused(ctx context.Context, ruleID string, paused bool, eventType string) error {
+func (db *DB) setRecurringRulePaused(ctx context.Context, ruleID string, paused bool, eventType string, payload any) error {
 	if ruleID == "" {
 		return errors.New("rule_id must not be empty")
 	}
@@ -296,9 +296,9 @@ func (db *DB) setRecurringRulePaused(ctx context.Context, ruleID string, paused 
 		return fmt.Errorf("check rule exists: %w", err)
 	}
 
-	payload, _ := json.Marshal(struct{}{})
+	payloadBytes, _ := json.Marshal(payload)
 	if _, err := appendEvents(ctx, tx, aggregateTypeRecurringRule, ruleID, []NewEvent{
-		{EventType: eventType, Payload: payload},
+		{EventType: eventType, Payload: payloadBytes},
 	}); err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("append event: %w", err)
