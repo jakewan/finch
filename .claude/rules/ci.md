@@ -1,9 +1,46 @@
 # CI Conventions
 
-## Build Verification
+The CI workflow runs a build check (plus Go test and lint). Catching failures locally avoids a slow push-wait-fail cycle. The checks below are scoped by which part of the tree a change touches.
 
-ALWAYS build the Qt app (`just build-app`) before pushing changes to `app/` files. The CI workflow only runs a build check — catching compilation errors locally avoids a slow push-wait-fail cycle.
+## Local Checks by Change Area
 
-## Go Checks
+Run the checks matching the files a change touches before pushing:
 
-ALWAYS run `just test` and `just lint` before pushing changes to Go modules (`core/`, `daemon/`, `mcp/`).
+- **Go modules** (`core/`, `daemon/`, `mcp/`) — `just test` and `just lint`.
+- **Qt app** (`app/`) — `just build-app`. CI only runs a build check for the app, so a local build is the fast feedback path.
+- **Protobuf** (`proto/`) — `just proto` to regenerate. Generated code lives in `daemon/gen/` and is not committed, so it must regenerate cleanly.
+
+This list is the single source of truth for the supplies below — they reference it rather than restating commands.
+
+## Pre-Merge Checks
+
+(extension point: `pre-merge-checks`)
+
+Before merging a PR, run the checks from "Local Checks by Change Area" matching the changed files. Surface any failure as a blocker and resolve it before proceeding.
+
+## Readiness Checks
+
+(extension point: `pr-readiness-checks`)
+
+When reporting PR health, run the checks from "Local Checks by Change Area" matching the changed files and report each result. Also confirm no generated code (`daemon/gen/`) is tracked in the diff.
+
+## Waste Patterns
+
+(extension point: `pr-waste-patterns`)
+
+Beyond the conflict-marker baseline, scan added lines for:
+
+- Debug output left behind — `fmt.Println` / `log.Println` used for ad-hoc tracing.
+- Unaddressed markers — `TODO`, `FIXME`, `HACK`.
+- Test shortcuts — `t.Skip(...)` or focused/disabled tests committed unintentionally.
+- `//nolint` directives without a trailing reason.
+- Committed generated code under `daemon/gen/`.
+
+## Stale-PR Smoke Tests
+
+(extension point: `stale-pr-smoke-tests`)
+
+After merging the base branch into a stale branch, run beyond the standard test/lint pass:
+
+- `just proto` then `just all` — a clean regenerate-and-build is the only signal for proto or generated-code drift the merge may have introduced (generated code is not committed).
+- `just build-app` when `app/` is touched.
