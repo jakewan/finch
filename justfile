@@ -52,6 +52,12 @@ fmt:
     cd daemon && go fmt ./...
     cd mcp && go fmt ./...
 
+# Reconcile go.mod/go.sum across all Go modules (run after a dependency change)
+tidy:
+    cd core && go mod tidy
+    cd daemon && go mod tidy
+    cd mcp && go mod tidy
+
 # Remove build artifacts
 clean:
     rm -f daemon/finch-daemon mcp/finch-mcp
