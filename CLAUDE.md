@@ -39,7 +39,7 @@ just test-mcp     # MCP server only
 
 ## Go Module Dependencies
 
-The daemon and mcp modules depend on core via `replace` directives pointing to `../core`.
+The daemon and mcp modules depend on core via `replace` directives pointing to `../core`. Because they resolve core's full dependency graph through those directives, a dependency change that shifts core's transitive versions (e.g. a Dependabot bump) leaves their `go.sum` stale. Run `just tidy` to reconcile all three modules after any such change.
 
 ## CI Notes
 
