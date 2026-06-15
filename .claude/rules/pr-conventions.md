@@ -51,7 +51,7 @@ Add the entry under `## [Unreleased]` in the matching category — `Added`, `Cha
 
 (extension point: `post-merge-next-work-suggestions`)
 
-After a merge, suggest re-orienting with the `/project-summary` skill, or `/milestone-lifecycle` when the active milestone is at or near completion.
+After a merge, suggest re-orienting with the `/pm-project-summary` skill, or `/milestone-lifecycle` when the active milestone is at or near completion.
 
 ## Branch Freshness
 
