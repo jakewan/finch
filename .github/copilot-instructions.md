@@ -19,6 +19,17 @@ Compare the files changed in the PR against what the PR description claims:
 
 **Assessment:** Post a pass/fail comment listing any discrepancies.
 
+### Check 3: No Private Tooling References
+
+finch is a public repository; tracked files must not reference tooling that resolves only in a maintainer's personal environment. Scan the added and changed lines for:
+- Agent slash-command skills that are not defined in this repo (personal skills from someone's own config).
+- Personal MCP servers, or the maintainer's private repositories.
+- Literal personal home paths (`/home/<user>/...`).
+
+Do NOT flag finch's own references: its runtime and config paths (`$XDG_RUNTIME_DIR/finch/...`, `~/.local/share/finch/...`, `FINCH_DB_PATH`), its own in-repo skills under `.claude/skills/`, or `(extension point: name)` slot declarations.
+
+**Assessment:** Post a pass/fail comment listing any private-tooling references found.
+
 ## Architecture Context
 
 Finch has four components communicating via gRPC over Unix socket:
