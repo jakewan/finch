@@ -1,11 +1,20 @@
 # Finch
 
-Personal finance projection tool. Four components communicating via gRPC over Unix socket:
+Finch projects your personal finances forward — model accounts, recurring rules, and transfers, then see where your balances land over time.
+
+You interact with it two ways, both backed by a single daemon that owns your data:
+
+- a **desktop GUI** (the Qt app), and
+- **any AI assistant** that speaks the [Model Context Protocol](https://modelcontextprotocol.io) (Claude Desktop and others) — the MCP server is what makes your finances reachable from an assistant, not just a terminal.
+
+## Architecture
+
+Four components communicating via gRPC over a Unix socket:
 
 - **core/** — Go package with domain logic and SQLite storage (imported by daemon)
 - **daemon/** — Go binary, gRPC server, sole database owner, runs as systemd user service
-- **mcp/** — Go binary, MCP server that delegates to daemon via gRPC
-- **app/** — C++/Qt/QML application, gRPC client of daemon
+- **mcp/** — Go binary, MCP server exposing Finch to AI assistants; delegates to the daemon via gRPC
+- **app/** — C++/Qt/QML desktop application, gRPC client of daemon
 
 ## Prerequisites
 
