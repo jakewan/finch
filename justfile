@@ -17,7 +17,7 @@ build-mcp:
 # Build the Qt app
 build-app:
     cmake -S app -B app/build
-    cmake --build app/build
+    cmake --build app/build --target finch-app
 
 # Build and run the Qt app's Qt Quick Test suite (kept separate from `test`,
 # which is Go-only — folding it in would force a Qt/C++ build in Go-only environments)

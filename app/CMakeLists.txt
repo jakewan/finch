@@ -77,8 +77,10 @@ qt_add_qml_module(finch-app
 )
 
 # --- Qt Quick Test ---------------------------------------------------------
-# Kept in its own find_package so the production app build above does not depend
-# on the test toolchain being installed.
+# QuickTest has its own find_package so Qt6::QuickTest is linked only into the
+# test target below, never into finch-app. Configuring the project does still
+# require the test toolchain (the README lists the packages); the test target is
+# always built — `just build-app` limits itself to the finch-app target.
 find_package(Qt6 REQUIRED COMPONENTS QuickTest)
 enable_testing()
 
