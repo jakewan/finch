@@ -8,7 +8,7 @@ The app MUST use `QApplication`, not `QGuiApplication`. QtCharts QML types depen
 
 CI pins an exact Qt version via `jurplel/install-qt-action` (see `.github/workflows/ci-qt.yml`), independent of the runner's distro packages. The pinned version is the **API floor**: code freely to APIs available at that floor, and when raising it, bump the pin deliberately.
 
-Before using a Qt API, check its "since" version annotation against the **pinned floor** (not against Ubuntu `apt`, which is irrelevant now that CI no longer sources Qt from it). A newer-than-floor API means raising the pin first. The local dev install is typically newer than the floor, so it will not catch a floor violation — CI on the pinned version is the gate.
+Before using a Qt API, check its "since" version annotation against the **pinned floor** (not against Ubuntu `apt`, which is irrelevant now that CI no longer sources Qt from it). A newer-than-floor API means raising the pin first. The local dev install is typically newer than the floor, so it will not catch a floor violation. CI on the pinned version catches *C++-level* violations at compile time, but a too-new *QML* import is not caught by the default build (`qmlcachegen` warns and falls back rather than failing) — verify new QML imports at runtime.
 
 ## QML Property Names
 
