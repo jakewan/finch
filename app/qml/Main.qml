@@ -91,6 +91,11 @@ ApplicationWindow {
         width: 420
         // The embedded form carries its own Create button; no dialog standard buttons.
         standardButtons: Dialog.NoButton
+        // Don't let Escape/click-outside dismiss the dialog mid-create — a failure's
+        // error is shown inside the form, so closing it would swallow that feedback.
+        closePolicy: finchClient.createAccountInProgress
+                     ? Popup.NoAutoClose
+                     : (Popup.CloseOnEscape | Popup.CloseOnPressOutside)
 
         CreateAccountForm {
             id: createAccountForm

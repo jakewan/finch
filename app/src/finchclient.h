@@ -115,6 +115,7 @@ private:
     PingResult m_pendingResult;
     QVariantList m_accounts;
     bool m_accountsLoading = false;
+    bool m_accountsRefreshPending = false;
     QFutureWatcher<ListAccountsResult> m_accountsWatcher;
     bool m_createAccountInProgress = false;
     QFutureWatcher<CreateAccountResult> m_createAccountWatcher;

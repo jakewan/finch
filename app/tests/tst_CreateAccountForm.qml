@@ -25,24 +25,29 @@ TestCase {
         signalName: "created"
     }
 
-    // Returns { form, mock }; each test destroys them via teardown().
+    property var currentForm: null
+    property var currentMock: null
+
+    // Returns { form, mock }; cleanup() destroys them after each test — even on an
+    // assertion failure, which aborts the test function before any manual teardown runs.
     function build() {
-        var mock = mockFactory.createObject(testCase)
-        var form = formFactory.createObject(testCase, { client: mock })
-        verify(form !== null, "form instantiated")
-        return { form: form, mock: mock }
+        currentMock = mockFactory.createObject(testCase)
+        currentForm = formFactory.createObject(testCase, { client: currentMock })
+        verify(currentForm !== null, "form instantiated")
+        return { form: currentForm, mock: currentMock }
     }
 
-    function teardown(ctx) {
-        ctx.form.destroy()
-        ctx.mock.destroy()
+    // cleanup() is the Qt Quick Test per-test teardown hook; it always runs.
+    function cleanup() {
+        createdSpy.target = null
+        if (currentForm) { currentForm.destroy(); currentForm = null }
+        if (currentMock) { currentMock.destroy(); currentMock = null }
     }
 
     // C1 load-smoke: the real component instantiates and a known property reads back.
     function test_loadsAndStartsInvalid() {
         var ctx = build()
         compare(ctx.form.canSubmit, false)
-        teardown(ctx)
     }
 
     function test_disabledWhenNameEmpty() {
@@ -50,7 +55,6 @@ TestCase {
         ctx.form.typeIndex = 1 // Checking
         compare(ctx.form.nameText, "")
         compare(ctx.form.canSubmit, false)
-        teardown(ctx)
     }
 
     function test_disabledWhenNoType() {
@@ -58,7 +62,6 @@ TestCase {
         ctx.form.nameText = "Everyday"
         compare(ctx.form.selectedType, 0)
         compare(ctx.form.canSubmit, false)
-        teardown(ctx)
     }
 
     function test_enabledWhenNameAndTypeValid() {
@@ -66,7 +69,6 @@ TestCase {
         ctx.form.nameText = "Everyday"
         ctx.form.typeIndex = 1
         compare(ctx.form.canSubmit, true)
-        teardown(ctx)
     }
 
     function test_submitSendsTrimmedNameAndSelectedType() {
@@ -77,7 +79,6 @@ TestCase {
         compare(ctx.mock.callCount, 1)
         compare(ctx.mock.lastName, "Rainy Day")
         compare(ctx.mock.lastType, 2)
-        teardown(ctx)
     }
 
     function test_submitIgnoredWhenInvalid() {
@@ -86,7 +87,6 @@ TestCase {
         ctx.form.typeIndex = 1
         ctx.form.submit()
         compare(ctx.mock.callCount, 0)
-        teardown(ctx)
     }
 
     function test_disabledWhileCreateInProgress() {
@@ -97,7 +97,6 @@ TestCase {
         ctx.form.submit() // mock latches createAccountInProgress
         compare(ctx.mock.createAccountInProgress, true)
         compare(ctx.form.canSubmit, false) // form disables while a create is in flight
-        teardown(ctx)
     }
 
     function test_doubleSubmitSendsOnlyOne() {
@@ -107,7 +106,6 @@ TestCase {
         ctx.form.submit()
         ctx.form.submit() // second is gated by canSubmit (in-progress)
         compare(ctx.mock.callCount, 1)
-        teardown(ctx)
     }
 
     function test_successClearsFormAndSignalsCreated() {
@@ -122,7 +120,6 @@ TestCase {
         compare(ctx.form.nameText, "")
         compare(ctx.form.selectedType, 0)
         createdSpy.target = null
-        teardown(ctx)
     }
 
     function test_failureShowsErrorMessage() {
@@ -132,6 +129,5 @@ TestCase {
         ctx.form.submit()
         ctx.mock.fail("could not reach the daemon")
         compare(ctx.form.errorText, "could not reach the daemon")
-        teardown(ctx)
     }
 }

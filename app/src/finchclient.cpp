@@ -303,6 +303,15 @@ void FinchClient::onListAccountsFinished()
     m_accountsLoading = false;
     emit accountsLoadingChanged();
 
+    // A create completed while this fetch was in flight, so this result predates the new
+    // account and would clobber the entry appended in onCreateAccountFinished. Discard the
+    // stale list and re-fetch the authoritative one (which now includes the new account).
+    if (m_accountsRefreshPending) {
+        m_accountsRefreshPending = false;
+        listAccounts();
+        return;
+    }
+
     if (result.ok) {
         m_accounts = result.accounts;
     } else {
@@ -331,6 +340,11 @@ void FinchClient::onCreateAccountFinished()
     entry["name"] = result.name;
     m_accounts.append(entry);
     emit accountsChanged();
+
+    // If a listAccounts() is in flight, its result predates this create and would
+    // overwrite the appended entry; flag it so onListAccountsFinished reconciles.
+    if (m_accountsLoading)
+        m_accountsRefreshPending = true;
 
     emit accountCreated(result.id);
 }
