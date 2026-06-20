@@ -73,5 +73,32 @@ endif()
 qt_add_qml_module(finch-app
     URI Finch
     VERSION 1.0
-    QML_FILES qml/Main.qml qml/BalanceChart.qml
+    QML_FILES qml/Main.qml qml/BalanceChart.qml qml/CreateAccountForm.qml
 )
+
+# --- Qt Quick Test ---------------------------------------------------------
+# Kept in its own find_package so the production app build above does not depend
+# on the test toolchain being installed.
+find_package(Qt6 REQUIRED COMPONENTS QuickTest)
+enable_testing()
+
+add_executable(tst_createaccountform tests/tst_createaccountform.cpp)
+
+# QUICK_TEST_MAIN scans this directory for tst_*.qml at runtime. The specs load
+# the real form via a directory import ("../qml"), so the component under test is
+# the exact file the app ships — not a stub.
+target_compile_definitions(tst_createaccountform PRIVATE
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests")
+
+target_link_libraries(tst_createaccountform PRIVATE
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::QuickTest
+    Qt6::Qml
+)
+
+add_test(NAME tst_createaccountform COMMAND tst_createaccountform)
+
+# Run headless so the suite works in CI and over SSH (no display required).
+set_tests_properties(tst_createaccountform PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

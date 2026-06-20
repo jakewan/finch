@@ -34,6 +34,13 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
 
             Button {
+                text: "New Account"
+                // Account creation needs a live daemon to write to.
+                enabled: finchClient.connectionState === FinchClient.Connected
+                onClicked: createAccountDialog.open()
+            }
+
+            Button {
                 text: finchClient.pingInProgress ? "Pinging…" : "Ping Daemon"
                 enabled: !finchClient.pingInProgress
                 onClicked: finchClient.ping()
@@ -73,6 +80,30 @@ ApplicationWindow {
             anchors.centerIn: parent
             running: finchClient.pingInProgress
                      && finchClient.timeSeriesEmpty
+        }
+    }
+
+    Dialog {
+        id: createAccountDialog
+        title: "New Account"
+        anchors.centerIn: Overlay.overlay
+        modal: true
+        width: 420
+        // The embedded form carries its own Create button; no dialog standard buttons.
+        standardButtons: Dialog.NoButton
+
+        CreateAccountForm {
+            id: createAccountForm
+            width: parent.width
+            client: finchClient
+            onCreated: createAccountDialog.close()
+        }
+
+        // Start each opening from a clean slate.
+        onOpened: {
+            createAccountForm.nameText = ""
+            createAccountForm.typeIndex = 0
+            createAccountForm.errorText = ""
         }
     }
 

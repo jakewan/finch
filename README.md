@@ -31,10 +31,23 @@ mise install
 The C++/Qt app requires system-level packages. On Ubuntu/Debian:
 
 ```bash
-sudo apt install cmake qt6-base-dev qt6-declarative-dev qml6-module-qtquick-controls \
-  qt6-charts-dev qml6-module-qtcharts \
-  protobuf-compiler libprotobuf-dev libgrpc++-dev protobuf-compiler-grpc
+sudo apt install \
+  cmake \
+  protobuf-compiler protobuf-compiler-grpc libprotobuf-dev libgrpc++-dev \
+  qt6-base-dev qt6-declarative-dev qt6-charts-dev \
+  libqt6quicktest6 \
+  qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+  qml6-module-qtcharts qml6-module-qt-labs-settings qml6-module-qttest
 ```
+
+The split matters: the `*-dev` packages are needed to **build**, while the `qml6-module-*`
+packages are loaded at **runtime** — both to run the app and to run its Qt Quick Test suite
+(`just test-app`). A build can succeed but the app or tests fail to start if a runtime QML
+module is missing. `libqt6quicktest6` is the Qt Quick Test runtime library (its build-time
+link symlink ships in `qt6-declarative-dev`); `qml6-module-qttest` is the matching QML module.
+When you change a build or runtime dependency, update both this list and the apt packages in
+`.github/workflows/ci-qt.yml` (CI installs the same Qt/protobuf packages; `cmake` is
+preinstalled on the GitHub runner, so it is not in CI's apt list).
 
 ## Getting Started
 
@@ -44,6 +57,7 @@ just proto         # Generate protobuf Go code
 just all           # Build daemon and MCP server
 just build-app     # Build the Qt desktop app
 just test          # Run all Go tests
+just test-app      # Build and run the Qt app's Qt Quick Test suite
 just lint          # Run golangci-lint on all modules
 ```
 
