@@ -73,5 +73,47 @@ endif()
 qt_add_qml_module(finch-app
     URI Finch
     VERSION 1.0
-    QML_FILES qml/Main.qml qml/BalanceChart.qml
+    QML_FILES qml/Main.qml qml/BalanceChart.qml qml/CreateAccountForm.qml
 )
+
+# --- Qt Quick Test ---------------------------------------------------------
+# QuickTest has its own find_package so Qt6::QuickTest is linked only into the
+# test target below, never into finch-app. Configuring the project does still
+# require the test toolchain (the README lists the packages); the test target is
+# always built — `just build-app` limits itself to the finch-app target.
+find_package(Qt6 REQUIRED COMPONENTS QuickTest)
+enable_testing()
+
+add_executable(tst_createaccountform tests/tst_createaccountform.cpp)
+
+# A test-only QML module holding just the real shipping form and the mock client.
+# Scoping the module to these two self-contained files (rather than importing the whole
+# qml/ directory) keeps the test's runtime module dependencies down to what the form
+# itself imports — it does not drag in Main.qml/BalanceChart.qml and their transitive
+# modules (QtCharts, Qt.labs.settings, QtQml.WorkerScript). CreateAccountForm.qml is the
+# exact file the app ships, so the component under test is real, not a stub.
+qt_add_qml_module(tst_createaccountform
+    URI FinchFormTest
+    VERSION 1.0
+    QML_FILES
+        qml/CreateAccountForm.qml
+        tests/MockFinchClient.qml
+)
+
+# QUICK_TEST_MAIN scans this directory for tst_*.qml at runtime.
+target_compile_definitions(tst_createaccountform PRIVATE
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests")
+
+target_link_libraries(tst_createaccountform PRIVATE
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::QuickTest
+    Qt6::Qml
+)
+
+add_test(NAME tst_createaccountform COMMAND tst_createaccountform)
+
+# Run headless (no display required) and pin the dependency-light Basic Controls style,
+# so the test is deterministic across machines and CI needn't carry other styles' modules.
+set_tests_properties(tst_createaccountform PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic")

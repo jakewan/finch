@@ -25,6 +25,8 @@ FinchClient::FinchClient(const QString& socketPath, QObject* parent)
             this, &FinchClient::onPingFinished);
     connect(&m_accountsWatcher, &QFutureWatcher<ListAccountsResult>::finished,
             this, &FinchClient::onListAccountsFinished);
+    connect(&m_createAccountWatcher, &QFutureWatcher<CreateAccountResult>::finished,
+            this, &FinchClient::onCreateAccountFinished);
     connect(&m_timeSeriesWatcher, &QFutureWatcher<TimeSeriesResult>::finished,
             this, &FinchClient::onTimeSeriesFinished);
 }
@@ -33,6 +35,7 @@ FinchClient::~FinchClient()
 {
     m_pingWatcher.waitForFinished();
     m_accountsWatcher.waitForFinished();
+    m_createAccountWatcher.waitForFinished();
     m_timeSeriesWatcher.waitForFinished();
 }
 
@@ -97,6 +100,62 @@ void FinchClient::listAccounts()
     });
 
     m_accountsWatcher.setFuture(future);
+}
+
+void FinchClient::createAccount(const QString& name, int accountType)
+{
+    // Authoritative re-entrancy guard: the QML submit-disable is cosmetic, so without
+    // this a rapid double-click could fire two CreateAccount RPCs (the daemon does not
+    // prevent duplicate names) and create two accounts.
+    if (m_createAccountInProgress)
+        return;
+
+    m_createAccountInProgress = true;
+    emit createAccountInProgressChanged();
+
+    auto stub = m_stub.get();
+    std::string accountName = name.toStdString();
+    auto future = QtConcurrent::run([stub, accountName, accountType]() -> CreateAccountResult {
+        grpc::ClientContext context;
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
+
+        finch::v1::CreateAccountRequest request;
+        request.set_name(accountName);
+        request.set_type(static_cast<finch::v1::AccountType>(accountType));
+
+        finch::v1::CreateAccountResponse response;
+        grpc::Status status = stub->CreateAccount(&context, request, &response);
+
+        CreateAccountResult result;
+        if (status.ok()) {
+            result.ok = true;
+            result.id = QString::fromStdString(response.account().id());
+            result.name = QString::fromStdString(response.account().name());
+            return result;
+        }
+
+        // Surface the daemon's validation message verbatim (it is user-facing and
+        // specific); for everything else show a generic message rather than a raw
+        // low-level gRPC string. status only lives on this worker thread, so the
+        // message is copied into the result and emitted from the GUI-thread slot.
+        switch (status.error_code()) {
+        case grpc::StatusCode::INVALID_ARGUMENT:
+            result.errorMessage = QString::fromStdString(status.error_message());
+            break;
+        case grpc::StatusCode::UNAVAILABLE:
+            result.errorMessage = QStringLiteral("Could not reach the daemon.");
+            break;
+        case grpc::StatusCode::DEADLINE_EXCEEDED:
+            result.errorMessage = QStringLiteral("The request timed out. Please try again.");
+            break;
+        default:
+            result.errorMessage = QStringLiteral("Could not create the account. Please try again.");
+            break;
+        }
+        return result;
+    });
+
+    m_createAccountWatcher.setFuture(future);
 }
 
 void FinchClient::fetchTimeSeries(const QString& fromDate, const QString& toDate,
@@ -244,12 +303,50 @@ void FinchClient::onListAccountsFinished()
     m_accountsLoading = false;
     emit accountsLoadingChanged();
 
+    // A create completed while this fetch was in flight, so this result predates the new
+    // account and would clobber the entry appended in onCreateAccountFinished. Discard the
+    // stale list and re-fetch the authoritative one (which now includes the new account).
+    if (m_accountsRefreshPending) {
+        m_accountsRefreshPending = false;
+        listAccounts();
+        return;
+    }
+
     if (result.ok) {
         m_accounts = result.accounts;
     } else {
         m_accounts.clear();
     }
     emit accountsChanged();
+}
+
+void FinchClient::onCreateAccountFinished()
+{
+    auto result = m_createAccountWatcher.result();
+
+    m_createAccountInProgress = false;
+    emit createAccountInProgressChanged();
+
+    if (!result.ok) {
+        emit accountCreateFailed(result.errorMessage);
+        return;
+    }
+
+    // Append the created account to the model directly rather than refreshing via
+    // listAccounts(): that method's own in-progress guard would silently drop a refresh
+    // issued while a list is already in flight, leaving a successful create invisible.
+    QVariantMap entry;
+    entry["id"] = result.id;
+    entry["name"] = result.name;
+    m_accounts.append(entry);
+    emit accountsChanged();
+
+    // If a listAccounts() is in flight, its result predates this create and would
+    // overwrite the appended entry; flag it so onListAccountsFinished reconciles.
+    if (m_accountsLoading)
+        m_accountsRefreshPending = true;
+
+    emit accountCreated(result.id);
 }
 
 void FinchClient::onPingFinished()

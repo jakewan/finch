@@ -24,6 +24,13 @@ struct ListAccountsResult {
     QVariantList accounts;
 };
 
+struct CreateAccountResult {
+    bool ok = false;
+    QString id;
+    QString name;
+    QString errorMessage;
+};
+
 struct TimeSeriesPoint {
     qint64 msecsSinceEpoch;
     double balance;
@@ -41,6 +48,7 @@ class FinchClient : public QObject {
     Q_PROPERTY(bool pingInProgress READ pingInProgress NOTIFY pingInProgressChanged)
     Q_PROPERTY(QVariantList accounts READ accounts NOTIFY accountsChanged)
     Q_PROPERTY(bool accountsLoading READ accountsLoading NOTIFY accountsLoadingChanged)
+    Q_PROPERTY(bool createAccountInProgress READ createAccountInProgress NOTIFY createAccountInProgressChanged)
     Q_PROPERTY(bool timeSeriesLoading READ timeSeriesLoading NOTIFY timeSeriesLoadingChanged)
     Q_PROPERTY(bool timeSeriesEmpty READ timeSeriesEmpty NOTIFY timeSeriesDataChanged)
     Q_PROPERTY(QStringList timeSeriesAccountIds READ timeSeriesAccountIds NOTIFY timeSeriesDataChanged)
@@ -61,6 +69,7 @@ public:
     bool pingInProgress() const { return m_pingInProgress; }
     QVariantList accounts() const { return m_accounts; }
     bool accountsLoading() const { return m_accountsLoading; }
+    bool createAccountInProgress() const { return m_createAccountInProgress; }
     bool timeSeriesLoading() const { return m_timeSeriesLoading; }
     bool timeSeriesEmpty() const;
     QStringList timeSeriesAccountIds() const;
@@ -71,6 +80,7 @@ public:
 
     Q_INVOKABLE void ping();
     Q_INVOKABLE void listAccounts();
+    Q_INVOKABLE void createAccount(const QString& name, int accountType);
     Q_INVOKABLE void fetchTimeSeries(const QString& fromDate, const QString& toDate,
                                      int interval, const QStringList& accountIds);
     Q_INVOKABLE void populateSeries(QObject* series, const QString& accountId);
@@ -81,6 +91,9 @@ signals:
     void pingInProgressChanged();
     void accountsChanged();
     void accountsLoadingChanged();
+    void createAccountInProgressChanged();
+    void accountCreated(QString id);
+    void accountCreateFailed(QString message);
     void timeSeriesLoadingChanged();
     void timeSeriesDataChanged();
 
@@ -88,6 +101,7 @@ private slots:
     void onPingFinished();
     void applyPingResult();
     void onListAccountsFinished();
+    void onCreateAccountFinished();
     void onTimeSeriesFinished();
 
 private:
@@ -101,7 +115,10 @@ private:
     PingResult m_pendingResult;
     QVariantList m_accounts;
     bool m_accountsLoading = false;
+    bool m_accountsRefreshPending = false;
     QFutureWatcher<ListAccountsResult> m_accountsWatcher;
+    bool m_createAccountInProgress = false;
+    QFutureWatcher<CreateAccountResult> m_createAccountWatcher;
     bool m_timeSeriesLoading = false;
     QFutureWatcher<TimeSeriesResult> m_timeSeriesWatcher;
     TimeSeriesResult m_timeSeriesData;
