@@ -6,11 +6,20 @@ on:
     paths:
       - "app/**"
       - "proto/**"
+      - ".github/workflows/ci-qt.yml"
   pull_request:
     branches: [main]
     paths:
       - "app/**"
       - "proto/**"
+      - ".github/workflows/ci-qt.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
   build:

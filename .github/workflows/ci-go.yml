@@ -6,8 +6,55 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  # Cancel only superseded PR runs; let every main-branch run complete so each
+  # main commit keeps a finished CI record (bisect / future release tagging).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Least-privilege token. dorny/paths-filter needs pull-requests:read on PR
+# events; the rest need only contents:read for checkout. Without this, a future
+# org-wide flip to restricted default token permissions would fail the changes
+# gate job and, via needs:, block the required checks (repo-wide merge lock).
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
+  # Gate job: detect whether Go- or proto-relevant files changed. This runs on
+  # every PR (so the required checks below are never workflow-skipped, which
+  # would leave them stuck "Expected" and block merge). When nothing relevant
+  # changed, the jobs below are if-skipped, which reports them as passing.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+      proto: ${{ steps.filter.outputs.proto }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            go:
+              - 'core/**'
+              - 'daemon/**'
+              - 'mcp/**'
+              - 'proto/**'
+              - '**/go.mod'
+              - '**/go.sum'
+              - 'buf.yaml'
+              - 'buf.gen.yaml'
+              - '.golangci.yml'
+              - '.github/workflows/ci-go.yml'
+            proto:
+              - 'proto/**'
+              - 'buf.yaml'
+              - '.github/workflows/ci-go.yml'
+
   test-and-lint:
+    needs: changes
+    if: ${{ needs.changes.outputs.go == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -15,6 +62,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
+          cache-dependency-path: |
+            core/go.sum
+            daemon/go.sum
+            mcp/go.sum
 
       - uses: bufbuild/buf-action@v1
         with:
@@ -53,6 +104,8 @@ jobs:
         run: cd mcp && go test ./...
 
   proto-check:
+    needs: changes
+    if: ${{ needs.changes.outputs.proto == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
