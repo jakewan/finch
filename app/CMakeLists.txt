@@ -111,6 +111,7 @@ target_link_libraries(tst_createaccountform PRIVATE
 
 add_test(NAME tst_createaccountform COMMAND tst_createaccountform)
 
-# Run headless so the suite works in CI and over SSH (no display required).
+# Run headless (no display required) and pin the dependency-light Basic Controls style,
+# so the test is deterministic across machines and CI needn't carry other styles' modules.
 set_tests_properties(tst_createaccountform PROPERTIES
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic")

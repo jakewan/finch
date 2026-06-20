@@ -36,7 +36,8 @@ sudo apt install \
   protobuf-compiler protobuf-compiler-grpc libprotobuf-dev libgrpc++-dev \
   qt6-base-dev qt6-declarative-dev qt6-charts-dev \
   libqt6quicktest6 \
-  qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-window \
+  qml6-module-qtquick-controls qml6-module-qtquick-templates \
+  qml6-module-qtquick-layouts qml6-module-qtquick-window \
   qml6-module-qtqml-workerscript qml6-module-qtqml-models \
   qml6-module-qtcharts qml6-module-qt-labs-settings qml6-module-qttest
 ```
