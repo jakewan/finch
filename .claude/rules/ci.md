@@ -12,6 +12,14 @@ Run the checks matching the files a change touches before pushing:
 
 This list is the single source of truth for the supplies below — they reference it rather than restating commands.
 
+## Path-Scoping CI Without Deadlocking Required Checks
+
+`test-and-lint` and `proto-check` (in `ci-go.yml`) are required status checks enforced by the `main` branch ruleset. A required check that never reports leaves a PR stuck "Expected" and unmergeable.
+
+This constrains how Go CI is scoped to skip unrelated changes: NEVER add an `on: paths` filter to a workflow that hosts a required check. A path-filtered workflow that doesn't match produces no check run, so the required check never reports and the PR cannot merge. Instead, keep the workflow triggering on every PR and gate the expensive jobs at the *job* level — a cheap `changes` job (using `dorny/paths-filter`) sets per-area outputs, and the required jobs use `if:` to skip when their area is untouched. A job skipped via `if:` still reports its check as passing, so unrelated PRs stay mergeable while consuming no compute. The gate job needs `pull-requests: read`, supplied by a workflow-level `permissions:` block.
+
+The Qt `build` job is NOT a required check, so `ci-qt.yml` can safely use a workflow-level `on: paths` filter.
+
 ## Pre-Merge Checks
 
 (extension point: `pre-merge-checks`)
