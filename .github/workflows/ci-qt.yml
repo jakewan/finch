@@ -24,6 +24,7 @@ jobs:
           sudo apt-get install -y \
             qt6-base-dev qt6-declarative-dev qml6-module-qtquick-controls \
             qml6-module-qtquick-layouts \
+            qml6-module-qtqml-workerscript qml6-module-qtqml-models \
             qt6-charts-dev qml6-module-qtcharts \
             libqt6quicktest6 qml6-module-qttest \
             protobuf-compiler libprotobuf-dev libgrpc++-dev protobuf-compiler-grpc
