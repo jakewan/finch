@@ -27,25 +27,40 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install dependencies
+      # Qt is pinned to an exact version independent of the runner's apt packages,
+      # which lag (Ubuntu 24.04 ships 6.4.2). The pinned version is the project's API
+      # floor — bump it deliberately when adopting newer-than-floor APIs. 6.8.3 is the
+      # last open-source 6.8 LTS patch (6.8.4+ are commercial-only).
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          # QtCharts is an add-on module. aqt's base 6.8 covers the rest the app and
+          # the QuickTest harness load: QtQuick, Controls (+ Basic style), Templates,
+          # Layouts, Window, QtQml(.Models/.WorkerScript), QtCore, QtTest/QuickTest.
+          modules: "qtcharts"
+          cache: true
+
+      - name: Install system dependencies
         run: |
           sudo apt-get update
+          # aqt ships Qt's own libraries but not the system X/GL/xkb/fontconfig deps the
+          # QtQuick scenegraph dlopens — required even under the offscreen platform.
+          # protobuf/gRPC build the app's gRPC client (generated at build time).
           sudo apt-get install -y \
-            qt6-base-dev qt6-declarative-dev qml6-module-qtquick-controls \
-            qml6-module-qtquick-templates \
-            qml6-module-qtquick-layouts qml6-module-qtquick-window \
-            qml6-module-qtqml-workerscript qml6-module-qtqml-models \
-            qt6-charts-dev qml6-module-qtcharts \
-            libqt6quicktest6 qml6-module-qttest \
+            libgl1 libegl1 libxkbcommon0 libfontconfig1 libdbus-1-3 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xfixes0 \
             protobuf-compiler libprotobuf-dev libgrpc++-dev protobuf-compiler-grpc
 
       - name: Build
         run: |
-          cmake -S app -B app/build
+          # Point CMake at the aqt-installed Qt explicitly rather than relying solely on
+          # the action's env export, so find_package(Qt6 REQUIRED) cannot miss its prefix.
+          cmake -S app -B app/build -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
           cmake --build app/build
 
       # The Qt Quick Test suite (tst_*.qml) runs headless via the offscreen platform,
-      # set on the test in CMake. qt6-declarative-dev ships the QuickTest link symlink;
-      # libqt6quicktest6 + qml6-module-qttest provide the runtime lib and QML module.
+      # set on the test in CMake. QuickTest and the QtTest QML module ship in aqt's base Qt.
       - name: Test
         run: ctest --test-dir app/build --output-on-failure

@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Qt.labs.settings
+import QtCore
 import Finch 1.0
 
 ApplicationWindow {

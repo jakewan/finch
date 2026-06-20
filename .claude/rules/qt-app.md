@@ -6,9 +6,9 @@ The app MUST use `QApplication`, not `QGuiApplication`. QtCharts QML types depen
 
 ## Qt Version Parity with CI
 
-CI installs Qt from Ubuntu `apt` packages, which lags behind rolling-release or developer installs. ALWAYS check "since" version annotations in Qt docs before using newer APIs.
+CI pins an exact Qt version via `jurplel/install-qt-action` (see `.github/workflows/ci-qt.yml`), independent of the runner's distro packages. The pinned version is the **API floor**: code freely to APIs available at that floor, and when raising it, bump the pin deliberately.
 
-When a Qt API has a deprecated form that works across all Qt6 versions and a replacement that requires a newer version, prefer the cross-compatible form for CI parity. A local deprecation warning is acceptable; a CI build failure is not.
+Before using a Qt API, check its "since" version annotation against the **pinned floor** (not against Ubuntu `apt`, which is irrelevant now that CI no longer sources Qt from it). A newer-than-floor API means raising the pin first. The local dev install is typically newer than the floor, so it will not catch a floor violation — CI on the pinned version is the gate.
 
 ## QML Property Names
 
