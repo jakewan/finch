@@ -1,9 +1,9 @@
 import QtQuick
 import QtTest
-// Load the real shipping form by directory import, so the component under test is the
-// exact file the app uses — not a stub. MockFinchClient sits in this directory and is
-// available unqualified.
-import "../qml"
+// FinchFormTest is the test-only module (see app/CMakeLists.txt) holding the real
+// shipping CreateAccountForm and the MockFinchClient double — scoped to just these two
+// files so the test doesn't pull in the rest of the app's QML and its modules.
+import FinchFormTest
 
 TestCase {
     id: testCase

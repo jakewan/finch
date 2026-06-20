@@ -45,9 +45,11 @@ packages are loaded at **runtime** — both to run the app and to run its Qt Qui
 (`just test-app`). A build can succeed but the app or tests fail to start if a runtime QML
 module is missing. `libqt6quicktest6` is the Qt Quick Test runtime library (its build-time
 link symlink ships in `qt6-declarative-dev`); `qml6-module-qttest` is the matching QML module.
-When you change a build or runtime dependency, update both this list and the apt packages in
-`.github/workflows/ci-qt.yml` (CI installs the same Qt/protobuf packages; `cmake` is
-preinstalled on the GitHub runner, so it is not in CI's apt list).
+CI (`.github/workflows/ci-qt.yml`) builds the app and runs the headless test suite, so it
+installs the build- and test-time subset of this list — it omits the modules only a full app
+launch needs (e.g. `qml6-module-qt-labs-settings`), and `cmake` is preinstalled on the GitHub
+runner. When you change a dependency, update this list and CI's apt list as the change
+warrants.
 
 ## Getting Started
 

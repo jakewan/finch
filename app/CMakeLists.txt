@@ -84,9 +84,21 @@ enable_testing()
 
 add_executable(tst_createaccountform tests/tst_createaccountform.cpp)
 
-# QUICK_TEST_MAIN scans this directory for tst_*.qml at runtime. The specs load
-# the real form via a directory import ("../qml"), so the component under test is
-# the exact file the app ships — not a stub.
+# A test-only QML module holding just the real shipping form and the mock client.
+# Scoping the module to these two self-contained files (rather than importing the whole
+# qml/ directory) keeps the test's runtime module dependencies down to what the form
+# itself imports — it does not drag in Main.qml/BalanceChart.qml and their transitive
+# modules (QtCharts, Qt.labs.settings, QtQml.WorkerScript). CreateAccountForm.qml is the
+# exact file the app ships, so the component under test is real, not a stub.
+qt_add_qml_module(tst_createaccountform
+    URI FinchFormTest
+    VERSION 1.0
+    QML_FILES
+        qml/CreateAccountForm.qml
+        tests/MockFinchClient.qml
+)
+
+# QUICK_TEST_MAIN scans this directory for tst_*.qml at runtime.
 target_compile_definitions(tst_createaccountform PRIVATE
     QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests")
 
