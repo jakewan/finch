@@ -166,6 +166,12 @@ TestCase {
         ctx.panel.selectedAccountIndex = 1
         compare(ctx.panel.transactionList.currentIndex, -1)
         verify(ctx.panel.selectedTransaction === null)
+        // Follow through with the new account's (shorter) data: the selection must stay
+        // cleared once the swapped list actually arrives, not only at the synchronous reset.
+        ctx.mock.succeedTransactions([sampleTransactions[1]])
+        compare(ctx.panel.transactionList.count, 1)
+        compare(ctx.panel.transactionList.currentIndex, -1)
+        verify(ctx.panel.selectedTransaction === null)
     }
 
     // New data for the same account also clears the prior selection (a stale index could

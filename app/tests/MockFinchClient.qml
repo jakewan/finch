@@ -1,7 +1,7 @@
 import QtQuick
 
-// Test double for FinchClient: records createAccount calls and lets specs drive the
-// success/failure signals the form reacts to, with no daemon or gRPC involved.
+// Test double for FinchClient: records createAccount and listTransactions calls and lets
+// specs drive the resulting signals/data the components react to, with no daemon or gRPC.
 QtObject {
     property bool createAccountInProgress: false
     property string lastName: ""

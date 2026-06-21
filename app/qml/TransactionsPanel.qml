@@ -92,8 +92,10 @@ Item {
         ComboBox {
             id: accountCombo
             Layout.fillWidth: true
-            // Mirror AccountsPanel's null-guard so the panel is instantiable without a client.
-            model: panel.client ? panel.client.accounts : []
+            // panel.accounts is the single source for the account list (already client-null-
+            // guarded); onAccountSelected reads the same property, so the selector and the
+            // index->id lookup can never diverge.
+            model: panel.accounts
             textRole: "name"
             // Start unselected: index 0 of client.accounts is a REAL account (unlike a
             // form-owned type list with a prependable sentinel), so a placeholder displayText
