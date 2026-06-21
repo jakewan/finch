@@ -1,13 +1,13 @@
 # CI Conventions
 
-The CI workflow runs a build check (plus Go test and lint). Catching failures locally avoids a slow push-wait-fail cycle. The checks below are scoped by which part of the tree a change touches.
+The CI workflow runs build, test, and lint checks (Go test and lint, plus the Qt app build and its Quick Test suite). Catching failures locally avoids a slow push-wait-fail cycle. The checks below are scoped by which part of the tree a change touches.
 
 ## Local Checks by Change Area
 
 Run the checks matching the files a change touches before pushing:
 
 - **Go modules** (`core/`, `daemon/`, `mcp/`) — `just test` and `just lint`.
-- **Qt app** (`app/`) — `just build-app`. CI only runs a build check for the app, so a local build is the fast feedback path.
+- **Qt app** (`app/`) — `just test-app`. This builds the app *and* runs the Qt Quick Test suite, mirroring what CI runs, so it is the fast feedback path.
 - **Protobuf** (`proto/`) — `just proto` to regenerate. Generated code lives in `daemon/gen/` and is not committed, so it must regenerate cleanly.
 
 This list is the single source of truth for the supplies below — they reference it rather than restating commands.
@@ -51,4 +51,4 @@ Beyond the conflict-marker baseline, scan added lines for:
 After merging the base branch into a stale branch, run beyond the standard test/lint pass:
 
 - `just proto` then `just all` — a clean regenerate-and-build is the only signal for proto or generated-code drift the merge may have introduced (generated code is not committed).
-- `just build-app` when `app/` is touched.
+- `just test-app` when `app/` is touched — it builds the app and runs the Qt Quick Test suite (superseding a plain `just build-app`).

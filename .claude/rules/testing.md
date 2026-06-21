@@ -20,4 +20,4 @@ Test domain invariants, validation boundaries, error conditions, and event produ
 
 ## Qt App
 
-Build verification (`just build-app`) is the current minimum for the Qt app. Introduce QML automated testing when the app has form-based interactions and data mutation workflows worth protecting with regression tests.
+The Qt app has a Qt Quick Test suite, run via `just test-app` (which builds the app, then runs the specs). A spec drives the real shipping component with an injected mock client and asserts on the calls that component makes — so behavior is verified, not just compilation. Build verification alone is no longer the ceiling; a form or view with input validation or data mutation earns a spec. See `qt-app.md` for the harness mechanics (test-only QML module, mock injection, headless/style settings).

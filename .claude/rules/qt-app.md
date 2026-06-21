@@ -1,3 +1,7 @@
+---
+paths: "app/**/*"
+---
+
 # Qt App Development
 
 ## QApplication Required
@@ -41,5 +45,11 @@ After installing or changing a desktop entry or icon, a running Plasma session m
 ## Build and Test
 
 Build: `just build-app` (or `cmake -S app -B app/build && cmake --build app/build`).
+
+Automated tests: `just test-app` configures, builds, and runs the Qt Quick Test suite via `ctest`. Conventions (defined in `app/CMakeLists.txt`):
+
+- **Test-only QML module.** Each form/view is tested through a dedicated module (e.g. `FinchFormTest`) scoped to just the real shipping component plus a mock client (`MockFinchClient.qml`). Scoping the module to those self-contained files — rather than the whole `qml/` directory — keeps the test's runtime dependencies to what the component itself imports, so it does not drag in `Main.qml`/`BalanceChart.qml` and their transitive modules (QtCharts, QtQml.WorkerScript). The component under test is the exact file the app ships, not a stub.
+- **Mock injection.** The shipping component declares `required property var client`; the app injects the real C++ `FinchClient`, tests inject `MockFinchClient`, which records calls and exposes `succeed()`/`fail()` to drive outcomes.
+- **Headless + deterministic style.** Tests run with `QT_QPA_PLATFORM=offscreen` (no display) and a pinned `QT_QUICK_CONTROLS_STYLE=Basic`, set per-test in CMake, so results are reproducible across machines and CI needn't carry other Controls styles' modules.
 
 Manual testing requires a running daemon with seed data. The daemon must be built and started separately (`just build-daemon && daemon/finch-daemon`).
