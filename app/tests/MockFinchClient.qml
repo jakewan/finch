@@ -17,6 +17,12 @@ QtObject {
     property string lastAccountId: ""
     property int transactionsCallCount: 0
     property bool transactionsLoading: false
+    // Faithful to the real client's single-in-flight reconciliation (see listTransactions /
+    // succeedTransactions): the account the running fetch is for, vs. the account most
+    // recently requested. When they diverge, a stale completion is discarded and the
+    // requested account re-fetched — so panel specs see the real states during a rapid
+    // account switch rather than an unrealistic two-concurrent-fetch model.
+    property string inFlightAccountId: ""
 
     signal accountCreated(string id)
     signal accountCreateFailed(string message)
@@ -40,17 +46,31 @@ QtObject {
         accountCreateFailed(message)
     }
 
+    // callCount counts invocations (every call). The re-entrancy guard mirrors the real
+    // client: a second request while a fetch is in flight is recorded as the new requested
+    // account but does NOT start a concurrent fetch — it is reconciled on completion.
     function listTransactions(accountId) {
         lastAccountId = accountId
         transactionsCallCount += 1
+        if (transactionsLoading)
+            return
+        inFlightAccountId = accountId
         transactionsLoading = true
     }
 
-    // Assigning `transactions` IS the notification the panel's model binding reacts to —
-    // exactly like the real client's transactionsChanged. A signal-only shape would leave
-    // the bound ListView stale and every render assertion failing against an empty view.
+    // Models the in-flight fetch (for inFlightAccountId) completing. Assigning `transactions`
+    // IS the notification the panel's model binding reacts to — exactly like the real
+    // client's transactionsChanged; a signal-only shape would leave the bound ListView stale.
+    // If a newer account was requested meanwhile, this completion is stale: discard `list`
+    // and re-enter the in-flight state for the requested account (the spec drives the next
+    // succeedTransactions to complete that reconciled fetch).
     function succeedTransactions(list) {
         transactionsLoading = false
+        if (inFlightAccountId !== lastAccountId) {
+            inFlightAccountId = lastAccountId
+            transactionsLoading = true
+            return
+        }
         transactions = list
     }
 }

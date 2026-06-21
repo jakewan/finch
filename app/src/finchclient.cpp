@@ -163,14 +163,24 @@ void FinchClient::createAccount(const QString& name, int accountType)
 
 void FinchClient::listTransactions(const QString& accountId)
 {
+    m_requestedTransactionsAccountId = accountId;
+    // A fetch is already in flight; do not start a concurrent one (a second concurrent
+    // QtConcurrent task would no longer be waited on by the destructor and could outlive the
+    // stub). onListTransactionsFinished reconciles to the requested account once it lands.
     if (m_transactionsLoading)
         return;
 
+    startTransactionsFetch();
+}
+
+void FinchClient::startTransactionsFetch()
+{
     m_transactionsLoading = true;
+    m_inFlightTransactionsAccountId = m_requestedTransactionsAccountId;
     emit transactionsLoadingChanged();
 
     auto stub = m_stub.get();
-    std::string id = accountId.toStdString();
+    std::string id = m_inFlightTransactionsAccountId.toStdString();
     auto future = QtConcurrent::run([stub, id]() -> ListTransactionsResult {
         grpc::ClientContext context;
         context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
@@ -402,9 +412,18 @@ void FinchClient::onListTransactionsFinished()
     m_transactionsLoading = false;
     emit transactionsLoadingChanged();
 
-    // #33 is read-only: no mutation can race this fetch, so no refresh-reconciliation
-    // machinery (cf. accounts). A failed fetch clears the list — the panel's empty/state
-    // message covers it; a dedicated error surface rides along with #38's write work.
+    // A newer account was selected while this fetch was in flight (a rapid account switch);
+    // its result is for the wrong account. Discard it and fetch the account now selected.
+    // This input-ordering race is independent of the read-only nature of the feature — it is
+    // about which account the user wants, not about a mutation racing the read.
+    if (m_inFlightTransactionsAccountId != m_requestedTransactionsAccountId) {
+        startTransactionsFetch();
+        return;
+    }
+
+    // A failed fetch clears the list — the panel's empty/state message covers it; a dedicated
+    // error surface rides along with the later transaction-recording work, where write
+    // failures make it load-bearing.
     if (result.ok) {
         m_transactions = result.transactions;
     } else {

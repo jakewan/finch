@@ -174,6 +174,26 @@ TestCase {
         verify(ctx.panel.selectedTransaction === null)
     }
 
+    // Rapid account switch: selecting B while A's fetch is still in flight must end with B's
+    // transactions shown, never A's. The client defers B's fetch behind A's, then on A's
+    // completion discovers the selection moved on, discards A's result, and re-fetches B.
+    function test_midFetchSwitchReconcilesToRequestedAccount() {
+        var ctx = build()
+        ctx.panel.selectedAccountIndex = 0          // A: fetch in flight
+        verify(ctx.mock.transactionsLoading)
+        ctx.panel.selectedAccountIndex = 1          // B requested before A completes
+        compare(ctx.mock.lastAccountId, "a2")
+        // A completes — but B is now selected, so A's data must be discarded, not applied,
+        // and B re-fetched (the list passed here stands in for A's data).
+        ctx.mock.succeedTransactions(sampleTransactions)
+        verify(ctx.mock.transactionsLoading)        // reconciling: B's re-fetch in flight
+        compare(ctx.panel.transactionList.count, 0) // A's data was NOT applied
+        // B completes; its data finally lands.
+        ctx.mock.succeedTransactions([sampleTransactions[1]])
+        verify(!ctx.mock.transactionsLoading)
+        compare(ctx.panel.transactionList.count, 1)
+    }
+
     // New data for the same account also clears the prior selection (a stale index could
     // point past the end of a shorter incoming list).
     function test_newDataResetsSelection() {

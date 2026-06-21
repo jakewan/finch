@@ -118,6 +118,11 @@ private slots:
     void onTimeSeriesFinished();
 
 private:
+    // Starts a transactions fetch for m_requestedTransactionsAccountId (latching it as the
+    // in-flight account). The re-entrancy guard in listTransactions and the reconciliation in
+    // onListTransactionsFinished both funnel through here.
+    void startTransactionsFetch();
+
     std::shared_ptr<grpc::Channel> m_channel;
     std::unique_ptr<finch::v1::FinchService::Stub> m_stub;
     QString m_version;
@@ -134,6 +139,13 @@ private:
     QFutureWatcher<CreateAccountResult> m_createAccountWatcher;
     QVariantList m_transactions;
     bool m_transactionsLoading = false;
+    // Single-in-flight reconciliation: the account the running fetch is for vs. the account
+    // most recently requested. When they diverge (a rapid account switch arrived mid-fetch),
+    // the stale result is discarded and the requested account re-fetched. Keyed on the
+    // account id, not a bool like the accounts path, because the correct reconciled fetch
+    // depends on which account is now selected.
+    QString m_requestedTransactionsAccountId;
+    QString m_inFlightTransactionsAccountId;
     QFutureWatcher<ListTransactionsResult> m_transactionsWatcher;
     bool m_timeSeriesLoading = false;
     QFutureWatcher<TimeSeriesResult> m_timeSeriesWatcher;
