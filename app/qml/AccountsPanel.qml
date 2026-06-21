@@ -23,6 +23,7 @@ Item {
 
         CreateAccountForm {
             id: form
+            objectName: "createForm"
             Layout.fillWidth: true
             client: panel.client
             enabled: panel.createEnabled

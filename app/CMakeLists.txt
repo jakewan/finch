@@ -103,6 +103,7 @@ qt_add_qml_module(tst_createaccountform
     VERSION 1.0
     QML_FILES
         qml/CreateAccountForm.qml
+        qml/AccountsPanel.qml
         tests/MockFinchClient.qml
 )
 

@@ -7,6 +7,8 @@ QtObject {
     property string lastName: ""
     property int lastType: -1
     property int callCount: 0
+    // AccountsPanel binds its account list to this; default empty so the binding is clean.
+    property var accounts: []
 
     signal accountCreated(string id)
     signal accountCreateFailed(string message)
