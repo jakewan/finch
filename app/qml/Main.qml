@@ -93,10 +93,11 @@ ApplicationWindow {
                 createEnabled: finchClient.connectionState === FinchClient.Connected
             },
 
-            PlaceholderScreen {
+            TransactionsPanel {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                headline: "Transactions"
+                client: finchClient
+                connected: finchClient.connectionState === FinchClient.Connected
             },
 
             PlaceholderScreen {

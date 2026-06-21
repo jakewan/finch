@@ -27,6 +27,8 @@ FinchClient::FinchClient(const QString& socketPath, QObject* parent)
             this, &FinchClient::onListAccountsFinished);
     connect(&m_createAccountWatcher, &QFutureWatcher<CreateAccountResult>::finished,
             this, &FinchClient::onCreateAccountFinished);
+    connect(&m_transactionsWatcher, &QFutureWatcher<ListTransactionsResult>::finished,
+            this, &FinchClient::onListTransactionsFinished);
     connect(&m_timeSeriesWatcher, &QFutureWatcher<TimeSeriesResult>::finished,
             this, &FinchClient::onTimeSeriesFinished);
 }
@@ -36,6 +38,7 @@ FinchClient::~FinchClient()
     m_pingWatcher.waitForFinished();
     m_accountsWatcher.waitForFinished();
     m_createAccountWatcher.waitForFinished();
+    m_transactionsWatcher.waitForFinished();
     m_timeSeriesWatcher.waitForFinished();
 }
 
@@ -156,6 +159,49 @@ void FinchClient::createAccount(const QString& name, int accountType)
     });
 
     m_createAccountWatcher.setFuture(future);
+}
+
+void FinchClient::listTransactions(const QString& accountId)
+{
+    if (m_transactionsLoading)
+        return;
+
+    m_transactionsLoading = true;
+    emit transactionsLoadingChanged();
+
+    auto stub = m_stub.get();
+    std::string id = accountId.toStdString();
+    auto future = QtConcurrent::run([stub, id]() -> ListTransactionsResult {
+        grpc::ClientContext context;
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
+
+        finch::v1::ListTransactionsRequest request;
+        request.set_account_id(id);
+        finch::v1::ListTransactionsResponse response;
+
+        grpc::Status status = stub->ListTransactions(&context, request, &response);
+        if (!status.ok())
+            return {false, {}};
+
+        QVariantList transactions;
+        for (const auto& txn : response.transactions()) {
+            QVariantMap entry;
+            entry["id"] = QString::fromStdString(txn.id());
+            entry["accountId"] = QString::fromStdString(txn.account_id());
+            entry["date"] = QString::fromStdString(txn.date());
+            // Signed cents; the panel formats and applies the sign.
+            entry["amount"] = static_cast<qlonglong>(txn.amount());
+            entry["name"] = QString::fromStdString(txn.name());
+            entry["description"] = QString::fromStdString(txn.description());
+            // Raw TransactionStatus int; the panel maps it to a human label.
+            entry["status"] = static_cast<int>(txn.status());
+            entry["recurringRuleId"] = QString::fromStdString(txn.recurring_rule_id());
+            transactions.append(entry);
+        }
+        return {true, transactions};
+    });
+
+    m_transactionsWatcher.setFuture(future);
 }
 
 void FinchClient::fetchTimeSeries(const QString& fromDate, const QString& toDate,
@@ -347,6 +393,24 @@ void FinchClient::onCreateAccountFinished()
         m_accountsRefreshPending = true;
 
     emit accountCreated(result.id);
+}
+
+void FinchClient::onListTransactionsFinished()
+{
+    auto result = m_transactionsWatcher.result();
+
+    m_transactionsLoading = false;
+    emit transactionsLoadingChanged();
+
+    // #33 is read-only: no mutation can race this fetch, so no refresh-reconciliation
+    // machinery (cf. accounts). A failed fetch clears the list — the panel's empty/state
+    // message covers it; a dedicated error surface rides along with #38's write work.
+    if (result.ok) {
+        m_transactions = result.transactions;
+    } else {
+        m_transactions.clear();
+    }
+    emit transactionsChanged();
 }
 
 void FinchClient::onPingFinished()
