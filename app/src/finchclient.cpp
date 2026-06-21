@@ -27,6 +27,8 @@ FinchClient::FinchClient(const QString& socketPath, QObject* parent)
             this, &FinchClient::onListAccountsFinished);
     connect(&m_createAccountWatcher, &QFutureWatcher<CreateAccountResult>::finished,
             this, &FinchClient::onCreateAccountFinished);
+    connect(&m_transactionsWatcher, &QFutureWatcher<ListTransactionsResult>::finished,
+            this, &FinchClient::onListTransactionsFinished);
     connect(&m_timeSeriesWatcher, &QFutureWatcher<TimeSeriesResult>::finished,
             this, &FinchClient::onTimeSeriesFinished);
 }
@@ -36,6 +38,7 @@ FinchClient::~FinchClient()
     m_pingWatcher.waitForFinished();
     m_accountsWatcher.waitForFinished();
     m_createAccountWatcher.waitForFinished();
+    m_transactionsWatcher.waitForFinished();
     m_timeSeriesWatcher.waitForFinished();
 }
 
@@ -156,6 +159,65 @@ void FinchClient::createAccount(const QString& name, int accountType)
     });
 
     m_createAccountWatcher.setFuture(future);
+}
+
+void FinchClient::listTransactions(const QString& accountId)
+{
+    m_requestedTransactionsAccountId = accountId;
+    // A fetch is already in flight; do not start a concurrent one (a second concurrent
+    // QtConcurrent task would no longer be waited on by the destructor and could outlive the
+    // stub). onListTransactionsFinished reconciles to the requested account once it lands.
+    if (m_transactionsLoading)
+        return;
+
+    startTransactionsFetch();
+}
+
+void FinchClient::startTransactionsFetch()
+{
+    m_transactionsLoading = true;
+    m_inFlightTransactionsAccountId = m_requestedTransactionsAccountId;
+    emit transactionsLoadingChanged();
+
+    // Clear immediately so the in-flight window never shows the previously loaded account's
+    // transactions under the newly selected account (the panel binds its list to this).
+    // Mirrors fetchTimeSeries clearing its data at the start of a fetch.
+    m_transactions.clear();
+    emit transactionsChanged();
+
+    auto stub = m_stub.get();
+    std::string id = m_inFlightTransactionsAccountId.toStdString();
+    auto future = QtConcurrent::run([stub, id]() -> ListTransactionsResult {
+        grpc::ClientContext context;
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
+
+        finch::v1::ListTransactionsRequest request;
+        request.set_account_id(id);
+        finch::v1::ListTransactionsResponse response;
+
+        grpc::Status status = stub->ListTransactions(&context, request, &response);
+        if (!status.ok())
+            return {false, {}};
+
+        QVariantList transactions;
+        for (const auto& txn : response.transactions()) {
+            QVariantMap entry;
+            entry["id"] = QString::fromStdString(txn.id());
+            entry["accountId"] = QString::fromStdString(txn.account_id());
+            entry["date"] = QString::fromStdString(txn.date());
+            // Signed cents; the panel formats and applies the sign.
+            entry["amount"] = static_cast<qlonglong>(txn.amount());
+            entry["name"] = QString::fromStdString(txn.name());
+            entry["description"] = QString::fromStdString(txn.description());
+            // Raw TransactionStatus int; the panel maps it to a human label.
+            entry["status"] = static_cast<int>(txn.status());
+            entry["recurringRuleId"] = QString::fromStdString(txn.recurring_rule_id());
+            transactions.append(entry);
+        }
+        return {true, transactions};
+    });
+
+    m_transactionsWatcher.setFuture(future);
 }
 
 void FinchClient::fetchTimeSeries(const QString& fromDate, const QString& toDate,
@@ -347,6 +409,33 @@ void FinchClient::onCreateAccountFinished()
         m_accountsRefreshPending = true;
 
     emit accountCreated(result.id);
+}
+
+void FinchClient::onListTransactionsFinished()
+{
+    auto result = m_transactionsWatcher.result();
+
+    m_transactionsLoading = false;
+    emit transactionsLoadingChanged();
+
+    // A newer account was selected while this fetch was in flight (a rapid account switch);
+    // its result is for the wrong account. Discard it and fetch the account now selected.
+    // This input-ordering race is independent of the read-only nature of the feature — it is
+    // about which account the user wants, not about a mutation racing the read.
+    if (m_inFlightTransactionsAccountId != m_requestedTransactionsAccountId) {
+        startTransactionsFetch();
+        return;
+    }
+
+    // A failed fetch clears the list — the panel's empty/state message covers it; a dedicated
+    // error surface rides along with the later transaction-recording work, where write
+    // failures make it load-bearing.
+    if (result.ok) {
+        m_transactions = result.transactions;
+    } else {
+        m_transactions.clear();
+    }
+    emit transactionsChanged();
 }
 
 void FinchClient::onPingFinished()

@@ -79,6 +79,7 @@ qt_add_qml_module(finch-app
         qml/CreateAccountForm.qml
         qml/NavigationShell.qml
         qml/AccountsPanel.qml
+        qml/TransactionsPanel.qml
         qml/PlaceholderScreen.qml
 )
 
@@ -154,4 +155,33 @@ target_link_libraries(tst_navigationshell PRIVATE
 add_test(NAME tst_navigationshell COMMAND tst_navigationshell)
 
 set_tests_properties(tst_navigationshell PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic")
+
+# --- TransactionsPanel test ---
+add_executable(tst_transactionspanel tests/tst_transactionspanel.cpp)
+
+# A test-only module scoped to the real master-detail panel + the shared mock client. The
+# panel imports only QtQuick/Controls/Layouts (no QtCharts), so the default QGuiApplication
+# entry point is fine — the QApplication requirement is a QtCharts-only constraint.
+qt_add_qml_module(tst_transactionspanel
+    URI FinchTransactionsTest
+    VERSION 1.0
+    QML_FILES
+        qml/TransactionsPanel.qml
+        tests/MockFinchClient.qml
+)
+
+target_compile_definitions(tst_transactionspanel PRIVATE
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/transactionspanel")
+
+target_link_libraries(tst_transactionspanel PRIVATE
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::QuickTest
+    Qt6::Qml
+)
+
+add_test(NAME tst_transactionspanel COMMAND tst_transactionspanel)
+
+set_tests_properties(tst_transactionspanel PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic")
