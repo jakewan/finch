@@ -18,6 +18,10 @@ Before using a Qt API, check its "since" version annotation against the **pinned
 
 Qt Quick Controls types mark many properties as FINAL. NEVER declare custom properties that shadow built-in names (e.g., `currentValue` on `ComboBox`). The QML engine will error with "Cannot override FINAL property" at runtime.
 
+## Qt Quick Layouts
+
+A `Layout` nested directly inside another `Layout` (e.g. a `ColumnLayout` rail inside a `RowLayout`) defaults `Layout.fillWidth`/`Layout.fillHeight` to **true** — unlike plain Items and controls, which default false. A fixed-size child therefore expands and starves its siblings. To pin a sidebar/rail at a fixed width, set `Layout.fillWidth: false` explicitly plus `Layout.preferredWidth`/`minimumWidth`/`maximumWidth`. Headless tests that assert child existence rather than geometry will not catch this.
+
 ## Qt Charts Gotchas
 
 **Theme on dark desktops:** ChartView's default theme renders transparent/invisible on dark desktop themes. ALWAYS set an explicit theme (e.g., `theme: ChartView.ChartThemeLight`).
@@ -51,5 +55,6 @@ Automated tests: `just test-app` configures, builds, and runs the Qt Quick Test 
 - **Test-only QML module.** Each form/view is tested through a dedicated module (e.g. `FinchFormTest`) scoped to just the real shipping component plus a mock client (`MockFinchClient.qml`). Scoping the module to those self-contained files — rather than the whole `qml/` directory — keeps the test's runtime dependencies to what the component itself imports, so it does not drag in `Main.qml`/`BalanceChart.qml` and their transitive modules (QtCharts, QtQml.WorkerScript). The component under test is the exact file the app ships, not a stub.
 - **Mock injection.** The shipping component declares `required property var client`; the app injects the real C++ `FinchClient`, tests inject `MockFinchClient`, which records calls and exposes `succeed()`/`fail()` to drive outcomes.
 - **Headless + deterministic style.** Tests run with `QT_QPA_PLATFORM=offscreen` (no display) and a pinned `QT_QUICK_CONTROLS_STYLE=Basic`, set per-test in CMake, so results are reproducible across machines and CI needn't carry other Controls styles' modules.
+- **Offscreen input.** The `offscreen` platform does not deliver synthetic mouse events to Qt Quick Controls — `mouseClick()` on a `Button` fires nothing and its `clicked` signal never emits. Drive components through their public API (property writes, `Q_INVOKABLE`/QML functions) or emit the signal directly (`button.clicked()`) to exercise an `onClicked` handler. The existing specs already follow this.
 
 Manual testing requires a running daemon with seed data. The daemon must be built and started separately (`just build-daemon && daemon/finch-daemon`).
