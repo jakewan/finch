@@ -34,13 +34,6 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
 
             Button {
-                text: "New Account"
-                // Account creation needs a live daemon to write to.
-                enabled: finchClient.connectionState === FinchClient.Connected
-                onClicked: createAccountDialog.open()
-            }
-
-            Button {
                 text: finchClient.pingInProgress ? "Pinging…" : "Ping Daemon"
                 enabled: !finchClient.pingInProgress
                 onClicked: finchClient.ping()
@@ -57,59 +50,61 @@ ApplicationWindow {
         }
     }
 
-    Item {
+    NavigationShell {
         anchors.fill: parent
+        destinationTitles: ["Overview", "Accounts", "Transactions", "Recurring Rules"]
+        screens: [
+            // Overview: the balance chart, with its disconnected empty-state and ping
+            // spinner. Wrapped in a plain Item so the chart can anchors.fill — anchors are
+            // illegal on a direct StackLayout child, but legal inside one.
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
-        BalanceChart {
-            anchors.fill: parent
-            anchors.margins: 16
-            visible: finchClient.connectionState === FinchClient.Connected
-                     || !finchClient.timeSeriesEmpty
-        }
+                BalanceChart {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    visible: finchClient.connectionState === FinchClient.Connected
+                             || !finchClient.timeSeriesEmpty
+                }
 
-        Label {
-            anchors.centerIn: parent
-            visible: finchClient.connectionState === FinchClient.Disconnected
-                     && finchClient.timeSeriesEmpty
-            text: "Not connected to daemon"
-            font.pointSize: 12
-            color: "gray"
-        }
+                Label {
+                    anchors.centerIn: parent
+                    visible: finchClient.connectionState === FinchClient.Disconnected
+                             && finchClient.timeSeriesEmpty
+                    text: "Not connected to daemon"
+                    font.pointSize: 12
+                    color: "gray"
+                }
 
-        BusyIndicator {
-            anchors.centerIn: parent
-            running: finchClient.pingInProgress
-                     && finchClient.timeSeriesEmpty
-        }
-    }
+                BusyIndicator {
+                    anchors.centerIn: parent
+                    running: finchClient.pingInProgress
+                             && finchClient.timeSeriesEmpty
+                }
+            },
 
-    Dialog {
-        id: createAccountDialog
-        title: "New Account"
-        anchors.centerIn: Overlay.overlay
-        modal: true
-        width: 420
-        // The embedded form carries its own Create button; no dialog standard buttons.
-        standardButtons: Dialog.NoButton
-        // Don't let Escape/click-outside dismiss the dialog mid-create — a failure's
-        // error is shown inside the form, so closing it would swallow that feedback.
-        closePolicy: finchClient.createAccountInProgress
-                     ? Popup.NoAutoClose
-                     : (Popup.CloseOnEscape | Popup.CloseOnPressOutside)
+            // Accounts: the create form (gated on a live daemon, as the old toolbar button
+            // was) plus a read-only list of existing accounts.
+            AccountsPanel {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                client: finchClient
+                createEnabled: finchClient.connectionState === FinchClient.Connected
+            },
 
-        CreateAccountForm {
-            id: createAccountForm
-            width: parent.width
-            client: finchClient
-            onCreated: createAccountDialog.close()
-        }
+            PlaceholderScreen {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                headline: "Transactions"
+            },
 
-        // Start each opening from a clean slate.
-        onOpened: {
-            createAccountForm.nameText = ""
-            createAccountForm.typeIndex = 0
-            createAccountForm.errorText = ""
-        }
+            PlaceholderScreen {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                headline: "Recurring Rules"
+            }
+        ]
     }
 
     footer: ToolBar {

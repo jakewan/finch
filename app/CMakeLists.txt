@@ -73,7 +73,13 @@ endif()
 qt_add_qml_module(finch-app
     URI Finch
     VERSION 1.0
-    QML_FILES qml/Main.qml qml/BalanceChart.qml qml/CreateAccountForm.qml
+    QML_FILES
+        qml/Main.qml
+        qml/BalanceChart.qml
+        qml/CreateAccountForm.qml
+        qml/NavigationShell.qml
+        qml/AccountsPanel.qml
+        qml/PlaceholderScreen.qml
 )
 
 # --- Qt Quick Test ---------------------------------------------------------
@@ -97,12 +103,16 @@ qt_add_qml_module(tst_createaccountform
     VERSION 1.0
     QML_FILES
         qml/CreateAccountForm.qml
+        qml/AccountsPanel.qml
         tests/MockFinchClient.qml
 )
 
-# QUICK_TEST_MAIN scans this directory for tst_*.qml at runtime.
+# QUICK_TEST_MAIN scans QUICK_TEST_SOURCE_DIR for tst_*.qml at runtime. Each test
+# executable points at its OWN subdirectory: the scan is recursive and a shared dir would
+# make every executable try to load every spec, failing on the test-only module a spec
+# imports but its executable does not link.
 target_compile_definitions(tst_createaccountform PRIVATE
-    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests")
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/createaccountform")
 
 target_link_libraries(tst_createaccountform PRIVATE
     Qt6::Quick
@@ -116,4 +126,32 @@ add_test(NAME tst_createaccountform COMMAND tst_createaccountform)
 # Run headless (no display required) and pin the dependency-light Basic Controls style,
 # so the test is deterministic across machines and CI needn't carry other styles' modules.
 set_tests_properties(tst_createaccountform PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic")
+
+# --- NavigationShell test ---
+add_executable(tst_navigationshell tests/tst_navigationshell.cpp)
+
+# A test-only module scoped to the real shell + the placeholder it composes — both
+# chart-free and client-free, so the shell is driven headless with no QtCharts or daemon.
+qt_add_qml_module(tst_navigationshell
+    URI FinchShellTest
+    VERSION 1.0
+    QML_FILES
+        qml/NavigationShell.qml
+        qml/PlaceholderScreen.qml
+)
+
+target_compile_definitions(tst_navigationshell PRIVATE
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/navigationshell")
+
+target_link_libraries(tst_navigationshell PRIVATE
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::QuickTest
+    Qt6::Qml
+)
+
+add_test(NAME tst_navigationshell COMMAND tst_navigationshell)
+
+set_tests_properties(tst_navigationshell PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic")
