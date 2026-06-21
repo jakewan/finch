@@ -55,7 +55,9 @@ Item {
 
         Label {
             Layout.fillWidth: true
-            visible: accountList.count === 0
+            // Only when connected: while disconnected the "Connect to the daemon" hint
+            // above already explains the empty list, so don't stack a second gray message.
+            visible: panel.createEnabled && accountList.count === 0
             text: "No accounts yet."
             color: "gray"
         }

@@ -66,25 +66,35 @@ TestCase {
     }
 
     // The rail renders exactly one button per destination, each carrying the objectName
-    // and label for its index — the wiring a nav click targets. (The literal click→onClicked
-    // step is left to manual verification: the offscreen test platform does not deliver
-    // synthetic mouse events to Controls buttons, and this harness drives components through
-    // their public API rather than simulated input, as the CreateAccountForm spec does.)
+    // and label for its index.
     function test_railRendersAButtonPerDestination() {
         var s = build()
         for (var i = 0; i < s.destinationTitles.length; i++) {
             var button = findChild(s, "navButton" + i)
             verify(button !== null, "nav button " + i + " exists")
             compare(button.text, s.destinationTitles[i])
-            // The rail is a fixed-width sidebar, not a full-width bar: a nested Layout
-            // defaults fillWidth to true, so without an explicit cap the rail expands and
-            // starves the content area. Bound the button width well under the 400px test
-            // window to catch that regression.
-            verify(button.width < 250,
-                   "nav button " + i + " stays within the rail (width " + button.width + ")")
+            // The rail is a fixed-width 180px sidebar, not a full-width bar: a nested
+            // Layout defaults fillWidth to true, so without an explicit cap the rail
+            // expands and starves the content area. Assert the button stays within the
+            // pinned rail width (catches both the full-width regression and a looser drift).
+            verify(button.width <= 180,
+                   "nav button " + i + " stays within the 180px rail (width " + button.width + ")")
         }
         compare(findChild(s, "navButton" + s.destinationTitles.length), null,
                 "no extra nav buttons beyond the destination count")
+    }
+
+    // A nav button's clicked signal switches the active destination. Emitting clicked()
+    // directly exercises the onClicked → currentIndex wiring without depending on the
+    // offscreen platform delivering synthetic mouse events (which it does not — only the
+    // mouse-event → clicked-signal step, Qt's own, is left to manual verification).
+    function test_navButtonClickSwitchesDestination() {
+        var s = build()
+        var button = findChild(s, "navButton2")
+        verify(button !== null, "nav button 2 exists")
+        button.clicked()
+        compare(s.currentIndex, 2)
+        compare(s.currentDestination.headline, "Transactions")
     }
 
     // Only the active destination's nav entry is highlighted, before and after a switch.

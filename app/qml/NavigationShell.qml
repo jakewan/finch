@@ -15,7 +15,10 @@ Item {
     id: shell
 
     // Host-supplied destination screens, in declaration order. Reparented into the
-    // StackLayout below once the component is complete.
+    // StackLayout below once the component is complete. Write-once: assign all screens
+    // declaratively at construction. Reassigning or appending after completion will not
+    // re-run the reparent, so the stack would go stale — give a dynamic destination set
+    // its own reparent/guard handling before relying on it.
     property list<Item> screens
 
     // Parallel list of nav-rail labels, one per screen, in declaration order.
