@@ -2,22 +2,23 @@
 
 ## Mandatory Checks
 
+The PR-description conventions these checks enforce live in `.claude/rules/pr-conventions.md` (the authoritative `pr-description-format` source); keep these checks aligned with it.
+
 ### Check 1: Overview Section Validation
 
-Every PR must include an **Overview** section that states:
-- The purpose of the change — why it matters
-- Whether the change is an incremental improvement or a transformative/innovative change
+Every PR must open with an **Overview** section stating the purpose of the change — what it accomplishes and why it matters.
 
 **Assessment:** Post a pass/fail comment. Fail if the Overview section is missing or lacks a clear purpose statement.
 
-### Check 2: Scope Accuracy
+### Check 2: Scope Cohesion
 
-Compare the files changed in the PR against what the PR description claims:
-- Flag files that are modified but not mentioned in the description
-- Flag files mentioned in the description but not actually changed
-- Assess whether all changes serve the stated purpose (cohesion)
+Assess whether the diff is cohesive — every change serving the PR's stated purpose:
+- Flag changes that do not serve the stated purpose (undisclosed or unrelated scope).
+- Flag claims in the description that the diff does not actually deliver.
 
-**Assessment:** Post a pass/fail comment listing any discrepancies.
+Do NOT require the description to name every changed file. `pr-conventions.md` directs PR descriptions to avoid file-by-file enumeration — the diff already shows what changed — so judge scope by cohesion and accuracy, not by whether each file is mentioned.
+
+**Assessment:** Post a pass/fail comment. Fail only on a genuine cohesion or accuracy gap, not on an unmentioned file.
 
 ### Check 3: No Private Tooling References
 
