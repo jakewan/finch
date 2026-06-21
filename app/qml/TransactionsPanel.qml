@@ -16,8 +16,9 @@ Item {
     // Injected by the host: Main.qml passes finchClient.
     required property var client
 
-    // Whether the daemon is connected (host-gated). When false the panel shows a connect
-    // hint instead of an account dropdown the user can't populate.
+    // Whether the daemon is connected (host-gated). When false the account list is empty and
+    // the selector is disabled (it can't be populated), and the state message shows a connect
+    // hint in place of any account/transaction content.
     property bool connected: true
 
     // The account list backing the selector; the transaction list backing the master view.
@@ -92,6 +93,9 @@ Item {
         ComboBox {
             id: accountCombo
             Layout.fillWidth: true
+            // Disconnected -> empty account list; disable so it doesn't read as a usable but
+            // empty dropdown. The connect hint (state message) explains the disabled state.
+            enabled: panel.connected
             // panel.accounts is the single source for the account list (already client-null-
             // guarded); onAccountSelected reads the same property, so the selector and the
             // index->id lookup can never diverge.

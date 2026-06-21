@@ -179,6 +179,12 @@ void FinchClient::startTransactionsFetch()
     m_inFlightTransactionsAccountId = m_requestedTransactionsAccountId;
     emit transactionsLoadingChanged();
 
+    // Clear immediately so the in-flight window never shows the previously loaded account's
+    // transactions under the newly selected account (the panel binds its list to this).
+    // Mirrors fetchTimeSeries clearing its data at the start of a fetch.
+    m_transactions.clear();
+    emit transactionsChanged();
+
     auto stub = m_stub.get();
     std::string id = m_inFlightTransactionsAccountId.toStdString();
     auto future = QtConcurrent::run([stub, id]() -> ListTransactionsResult {

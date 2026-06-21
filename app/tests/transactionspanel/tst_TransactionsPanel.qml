@@ -174,6 +174,17 @@ TestCase {
         verify(ctx.panel.selectedTransaction === null)
     }
 
+    // Switching account clears the prior account's rows immediately, during the new fetch's
+    // in-flight window — the list never shows account A's transactions under account B.
+    function test_switchingAccountClearsPriorRowsWhileLoading() {
+        var ctx = build()
+        selectAccountWith(ctx, 0, sampleTransactions)
+        compare(ctx.panel.transactionList.count, 2)
+        ctx.panel.selectedAccountIndex = 1          // new fetch in flight, no data yet
+        verify(ctx.mock.transactionsLoading)
+        compare(ctx.panel.transactionList.count, 0) // account 0's rows are gone, not stale
+    }
+
     // Rapid account switch: selecting B while A's fetch is still in flight must end with B's
     // transactions shown, never A's. The client defers B's fetch behind A's, then on A's
     // completion discovers the selection moved on, discards A's result, and re-fetches B.

@@ -56,6 +56,7 @@ QtObject {
             return
         inFlightAccountId = accountId
         transactionsLoading = true
+        transactions = []   // clear at fetch start, like the real client
     }
 
     // Models the in-flight fetch (for inFlightAccountId) completing. Assigning `transactions`
@@ -69,6 +70,7 @@ QtObject {
         if (inFlightAccountId !== lastAccountId) {
             inFlightAccountId = lastAccountId
             transactionsLoading = true
+            transactions = []   // re-fetch clears too, like the real client
             return
         }
         transactions = list
