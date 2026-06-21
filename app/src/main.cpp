@@ -26,6 +26,11 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     app.setApplicationName("Finch");
     app.setApplicationVersion("0.1.0");
+    // QSettings (the QML Settings type backing window-geometry persistence) needs an
+    // organization to resolve a storage location; without it, it fails to initialize
+    // and geometry is never saved. Must be set before the QML engine loads Main.qml.
+    app.setOrganizationName("finch");
+    app.setOrganizationDomain("jakewan.github.io");
     // Wayland derives a window's app_id from the desktop file name; matching it to
     // finch.desktop is what lets the compositor resolve the taskbar/window icon.
     app.setDesktopFileName(QStringLiteral("finch"));

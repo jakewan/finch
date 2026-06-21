@@ -90,7 +90,7 @@ add_executable(tst_createaccountform tests/tst_createaccountform.cpp)
 # Scoping the module to these two self-contained files (rather than importing the whole
 # qml/ directory) keeps the test's runtime module dependencies down to what the form
 # itself imports — it does not drag in Main.qml/BalanceChart.qml and their transitive
-# modules (QtCharts, Qt.labs.settings, QtQml.WorkerScript). CreateAccountForm.qml is the
+# modules (QtCharts, QtCore, QtQml.WorkerScript). CreateAccountForm.qml is the
 # exact file the app ships, so the component under test is real, not a stub.
 qt_add_qml_module(tst_createaccountform
     URI FinchFormTest
