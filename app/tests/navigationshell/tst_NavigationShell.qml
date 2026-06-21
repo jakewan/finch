@@ -76,6 +76,12 @@ TestCase {
             var button = findChild(s, "navButton" + i)
             verify(button !== null, "nav button " + i + " exists")
             compare(button.text, s.destinationTitles[i])
+            // The rail is a fixed-width sidebar, not a full-width bar: a nested Layout
+            // defaults fillWidth to true, so without an explicit cap the rail expands and
+            // starves the content area. Bound the button width well under the 400px test
+            // window to catch that regression.
+            verify(button.width < 250,
+                   "nav button " + i + " stays within the rail (width " + button.width + ")")
         }
         compare(findChild(s, "navButton" + s.destinationTitles.length), null,
                 "no extra nav buttons beyond the destination count")

@@ -51,9 +51,14 @@ Item {
         spacing: 0
 
         // Nav rail: one button per destination title; the active one is highlighted.
+        // A nested Layout defaults Layout.fillWidth to true, which would let the rail
+        // expand and starve the content area — pin it to a fixed width explicitly.
         ColumnLayout {
             Layout.fillHeight: true
-            Layout.preferredWidth: 160
+            Layout.fillWidth: false
+            Layout.preferredWidth: 180
+            Layout.minimumWidth: 180
+            Layout.maximumWidth: 180
             spacing: 4
 
             Repeater {
