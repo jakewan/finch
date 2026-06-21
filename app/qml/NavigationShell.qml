@@ -35,8 +35,13 @@ Item {
         ? contentStack.children[currentIndex]
         : null
 
+    // Gated on completion so the check only runs once screens are reparented into the
+    // stack. Without it, the destinationTitles assignment during construction can fire
+    // onDestinationTitlesChanged before onCompleted, when count is still 0, and warn spuriously.
+    property bool _completed: false
+
     function _warnOnTitleMismatch() {
-        if (destinationTitles.length !== count)
+        if (_completed && destinationTitles.length !== count)
             console.warn("NavigationShell: destinationTitles ("
                          + destinationTitles.length + ") does not match destination count ("
                          + count + ")")
@@ -45,6 +50,7 @@ Item {
     Component.onCompleted: {
         for (var i = 0; i < screens.length; i++)
             screens[i].parent = contentStack
+        _completed = true
         _warnOnTitleMismatch()
     }
     onDestinationTitlesChanged: _warnOnTitleMismatch()
