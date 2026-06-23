@@ -80,6 +80,8 @@ qt_add_qml_module(finch-app
         qml/NavigationShell.qml
         qml/AccountsPanel.qml
         qml/TransactionsPanel.qml
+        qml/RecordTransactionForm.qml
+        qml/txformat.js
         qml/PlaceholderScreen.qml
 )
 
@@ -168,6 +170,8 @@ qt_add_qml_module(tst_transactionspanel
     VERSION 1.0
     QML_FILES
         qml/TransactionsPanel.qml
+        qml/RecordTransactionForm.qml
+        qml/txformat.js
         tests/MockFinchClient.qml
 )
 
@@ -184,4 +188,35 @@ target_link_libraries(tst_transactionspanel PRIVATE
 add_test(NAME tst_transactionspanel COMMAND tst_transactionspanel)
 
 set_tests_properties(tst_transactionspanel PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic")
+
+# --- RecordTransactionForm test ---
+add_executable(tst_recordtransactionform tests/tst_recordtransactionform.cpp)
+
+# A test-only module scoped to the real record form, the txformat.js helper it imports, and
+# the shared mock client. The relative `import "txformat.js"` resolves only because the helper
+# is listed in the SAME module as the importing form — the module-membership invariant that
+# also applies to the main module and the transactionspanel module.
+qt_add_qml_module(tst_recordtransactionform
+    URI FinchRecordTest
+    VERSION 1.0
+    QML_FILES
+        qml/RecordTransactionForm.qml
+        qml/txformat.js
+        tests/MockFinchClient.qml
+)
+
+target_compile_definitions(tst_recordtransactionform PRIVATE
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/recordtransactionform")
+
+target_link_libraries(tst_recordtransactionform PRIVATE
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::QuickTest
+    Qt6::Qml
+)
+
+add_test(NAME tst_recordtransactionform COMMAND tst_recordtransactionform)
+
+set_tests_properties(tst_recordtransactionform PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic")

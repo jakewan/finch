@@ -215,4 +215,35 @@ TestCase {
         compare(ctx.panel.transactionList.currentIndex, -1)
         verify(ctx.panel.selectedTransaction === null)
     }
+
+    // The embedded record form is fed by the panel's selector — no account chosen means the
+    // form has no target, so its logical canSubmit is false. (Assert the logical predicate,
+    // never the visual `enabled`, which is unreliable under the offscreen harness.)
+    function test_recordFormDisabledBeforeAccountSelected() {
+        var ctx = build()
+        compare(ctx.panel.recordForm.canSubmit, false)
+    }
+
+    // Once an account is selected (injecting its id into the form) plus a name and a valid
+    // amount, the embedded form becomes submittable — the injection wiring is live.
+    function test_recordFormEnabledAfterAccountAndFields() {
+        var ctx = build()
+        ctx.panel.selectedAccountIndex = 0
+        ctx.panel.recordForm.nameText = "Coffee"
+        ctx.panel.recordForm.amountText = "12.34"
+        compare(ctx.panel.recordForm.canSubmit, true)
+    }
+
+    // Driving the form's success path re-fetches the selected account, so the new row appears.
+    function test_recordingRefetchesSelectedAccount() {
+        var ctx = build()
+        selectAccountWith(ctx, 0, sampleTransactions)
+        var before = ctx.mock.transactionsCallCount
+        ctx.panel.recordForm.nameText = "Coffee"
+        ctx.panel.recordForm.amountText = "12.34"
+        ctx.panel.recordForm.submit()
+        ctx.mock.succeedRecord("txn-99")
+        compare(ctx.mock.transactionsCallCount, before + 1)
+        compare(ctx.mock.lastAccountId, "a1")
+    }
 }
