@@ -128,13 +128,13 @@ Item {
                 text: "Expense"
                 ButtonGroup.group: signGroup
                 checked: form.expense
-                onClicked: form.expense = true
+                onClicked: { form.expense = true; errorLabel.text = "" }
             }
             RadioButton {
                 id: incomeRadio
                 text: "Income"
                 ButtonGroup.group: signGroup
-                onClicked: form.expense = false
+                onClicked: { form.expense = false; errorLabel.text = "" }
             }
         }
 
@@ -146,6 +146,9 @@ Item {
             // takes the date string at face value (no zone conversion), so a local default
             // matches the user's intent.
             text: Qt.formatDate(new Date(), "yyyy-MM-dd")
+            // Drop a stale daemon error the moment the user edits any input — consistent with
+            // the name/amount fields, so fixing the rejected field clears its message.
+            onTextChanged: errorLabel.text = ""
         }
 
         Label { text: "Description" }
@@ -153,6 +156,7 @@ Item {
             id: descriptionField
             Layout.fillWidth: true
             placeholderText: "Optional"
+            onTextChanged: errorLabel.text = ""
         }
 
         Label {
