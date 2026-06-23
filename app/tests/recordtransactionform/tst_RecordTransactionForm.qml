@@ -148,6 +148,19 @@ TestCase {
         verify(ctx.form.signedCents > 0)
     }
 
+    // A large amount (above the 32-bit int ceiling) records exactly: signedCents is a JS
+    // number, not a 32-bit QML int, so ~$30M does not overflow or truncate on the way to the
+    // client's 64-bit qlonglong amount.
+    function test_largeAmountDoesNotOverflow() {
+        var ctx = build({ accountId: "a1" })
+        ctx.form.nameText = "House"
+        ctx.form.amountText = "30000000" // $30,000,000 -> 3,000,000,000 cents (> INT32_MAX)
+        ctx.form.expense = true
+        compare(ctx.form.signedCents, -3000000000)
+        ctx.form.submit()
+        compare(ctx.mock.lastRecordAmount, -3000000000)
+    }
+
     // Preview shows the signed amount and flips with the toggle; empty when magnitude invalid.
     function test_previewReflectsSignAndMagnitude() {
         var ctx = build({ accountId: "a1" })

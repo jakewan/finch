@@ -38,7 +38,10 @@ Item {
     // validate amount at all, so this form is the sole gate on amount quality.
     readonly property bool amountValid: !isNaN(magnitude) && magnitude > 0
     // Math.round avoids float drift (12.34 * 100 -> 1233.9999...); the toggle applies the sign.
-    readonly property int signedCents: amountValid ? Math.round(magnitude * 100) * (expense ? -1 : 1) : 0
+    // Typed var, not int: the client's amount is a 64-bit qlonglong, and a QML int is 32-bit —
+    // an int here would overflow above ~$21.5M and record a truncated amount. A JS number
+    // marshals cleanly to qlonglong (exact integers up to 2^53).
+    readonly property var signedCents: amountValid ? Math.round(magnitude * 100) * (expense ? -1 : 1) : 0
     readonly property string previewText: amountValid ? TxFormat.formatAmount(signedCents) : ""
 
     // canSubmit is the single validation predicate the button and the specs share.
