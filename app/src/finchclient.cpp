@@ -29,6 +29,8 @@ FinchClient::FinchClient(const QString& socketPath, QObject* parent)
             this, &FinchClient::onCreateAccountFinished);
     connect(&m_transactionsWatcher, &QFutureWatcher<ListTransactionsResult>::finished,
             this, &FinchClient::onListTransactionsFinished);
+    connect(&m_recordTransactionWatcher, &QFutureWatcher<RecordTransactionResult>::finished,
+            this, &FinchClient::onRecordTransactionFinished);
     connect(&m_timeSeriesWatcher, &QFutureWatcher<TimeSeriesResult>::finished,
             this, &FinchClient::onTimeSeriesFinished);
 }
@@ -39,6 +41,7 @@ FinchClient::~FinchClient()
     m_accountsWatcher.waitForFinished();
     m_createAccountWatcher.waitForFinished();
     m_transactionsWatcher.waitForFinished();
+    m_recordTransactionWatcher.waitForFinished();
     m_timeSeriesWatcher.waitForFinished();
 }
 
@@ -218,6 +221,71 @@ void FinchClient::startTransactionsFetch()
     });
 
     m_transactionsWatcher.setFuture(future);
+}
+
+void FinchClient::recordTransaction(const QString& accountId, const QString& date,
+                                    qlonglong amount, const QString& name,
+                                    const QString& description, int status)
+{
+    // Authoritative re-entrancy guard, mirroring createAccount: the QML submit-disable is
+    // cosmetic, so without this a rapid double-submit could fire two RecordTransaction RPCs
+    // (the daemon does not dedupe) and record two transactions.
+    if (m_recordTransactionInProgress)
+        return;
+
+    m_recordTransactionInProgress = true;
+    emit recordTransactionInProgressChanged();
+
+    auto stub = m_stub.get();
+    std::string accountIdStr = accountId.toStdString();
+    std::string dateStr = date.toStdString();
+    std::string nameStr = name.toStdString();
+    std::string descriptionStr = description.toStdString();
+    auto future = QtConcurrent::run([stub, accountIdStr, dateStr, amount, nameStr,
+                                     descriptionStr, status]() -> RecordTransactionResult {
+        grpc::ClientContext context;
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
+
+        finch::v1::RecordTransactionRequest request;
+        request.set_account_id(accountIdStr);
+        request.set_date(dateStr);
+        request.set_amount(amount);
+        request.set_name(nameStr);
+        request.set_description(descriptionStr);
+        request.set_status(static_cast<finch::v1::TransactionStatus>(status));
+
+        finch::v1::RecordTransactionResponse response;
+        grpc::Status grpcStatus = stub->RecordTransaction(&context, request, &response);
+
+        RecordTransactionResult result;
+        if (grpcStatus.ok()) {
+            result.ok = true;
+            result.id = QString::fromStdString(response.transaction().id());
+            return result;
+        }
+
+        // Surface the daemon's validation message verbatim (it is user-facing and specific);
+        // everything else gets a generic message rather than a raw low-level gRPC string.
+        // status only lives on this worker thread, so the message is copied into the result
+        // and emitted from the GUI-thread slot.
+        switch (grpcStatus.error_code()) {
+        case grpc::StatusCode::INVALID_ARGUMENT:
+            result.errorMessage = QString::fromStdString(grpcStatus.error_message());
+            break;
+        case grpc::StatusCode::UNAVAILABLE:
+            result.errorMessage = QStringLiteral("Could not reach the daemon.");
+            break;
+        case grpc::StatusCode::DEADLINE_EXCEEDED:
+            result.errorMessage = QStringLiteral("The request timed out. Please try again.");
+            break;
+        default:
+            result.errorMessage = QStringLiteral("Could not record the transaction. Please try again.");
+            break;
+        }
+        return result;
+    });
+
+    m_recordTransactionWatcher.setFuture(future);
 }
 
 void FinchClient::fetchTimeSeries(const QString& fromDate, const QString& toDate,
@@ -436,6 +504,21 @@ void FinchClient::onListTransactionsFinished()
         m_transactions.clear();
     }
     emit transactionsChanged();
+}
+
+void FinchClient::onRecordTransactionFinished()
+{
+    auto result = m_recordTransactionWatcher.result();
+
+    m_recordTransactionInProgress = false;
+    emit recordTransactionInProgressChanged();
+
+    if (!result.ok) {
+        emit transactionRecordFailed(result.errorMessage);
+        return;
+    }
+
+    emit transactionRecorded(result.id);
 }
 
 void FinchClient::onPingFinished()

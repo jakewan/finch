@@ -24,8 +24,22 @@ QtObject {
     // account switch rather than an unrealistic two-concurrent-fetch model.
     property string inFlightAccountId: ""
 
+    // RecordTransactionForm (embedded in TransactionsPanel) drives these; default in-progress
+    // false so the embedded form starts enabled. Each field is captured separately so a spec
+    // can catch a name<->description transpose in the 6-arg positional call.
+    property bool recordTransactionInProgress: false
+    property string lastRecordAccountId: ""
+    property string lastRecordDate: ""
+    property var lastRecordAmount: 0
+    property string lastRecordName: ""
+    property string lastRecordDescription: ""
+    property int lastRecordStatus: -1
+    property int recordCallCount: 0
+
     signal accountCreated(string id)
     signal accountCreateFailed(string message)
+    signal transactionRecorded(string id)
+    signal transactionRecordFailed(string message)
 
     // Mirror the real client's observable lifecycle: in-progress latches true on the
     // call and clears when the test drives a terminal outcome via succeed()/fail().
@@ -44,6 +58,30 @@ QtObject {
     function fail(message) {
         createAccountInProgress = false
         accountCreateFailed(message)
+    }
+
+    // Mirror the real client: in-progress latches true synchronously on the call and clears
+    // when the test drives a terminal outcome via succeedRecord()/failRecord().
+    function recordTransaction(accountId, date, amount, name, description, status) {
+        lastRecordAccountId = accountId
+        lastRecordDate = date
+        lastRecordAmount = amount
+        lastRecordName = name
+        lastRecordDescription = description
+        lastRecordStatus = status
+        recordCallCount += 1
+        recordTransactionInProgress = true
+    }
+
+    // Clear in-progress BEFORE emitting so the after-success specs see an enabled form again.
+    function succeedRecord(id) {
+        recordTransactionInProgress = false
+        transactionRecorded(id)
+    }
+
+    function failRecord(message) {
+        recordTransactionInProgress = false
+        transactionRecordFailed(message)
     }
 
     // callCount counts invocations (every call). The re-entrancy guard mirrors the real

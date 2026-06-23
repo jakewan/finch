@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "txformat.js" as TxFormat
 
 // Transactions destination: a per-account master-detail view. An account selector drives a
 // per-account fetch; the master list shows one row per transaction; selecting a row fills
@@ -24,6 +25,14 @@ Item {
     // The account list backing the selector; the transaction list backing the master view.
     readonly property var accounts: client ? client.accounts : []
     readonly property var transactions: client ? client.transactions : []
+
+    // The id of the currently selected account, or "" when none is chosen. Single source for
+    // both the record form's injected accountId and the post-record re-fetch, so the two can
+    // never diverge; onAccountSelected reads it too rather than re-deriving the index->id.
+    readonly property string currentAccountId:
+        (client && accountCombo.currentIndex >= 0 && accounts[accountCombo.currentIndex])
+            ? accounts[accountCombo.currentIndex].id
+            : ""
 
     // The currently selected transaction, or null when nothing valid is selected. Null-guards
     // the detail pane against transactions[-1] / an index past the end of a shorter new list.
@@ -49,28 +58,15 @@ Item {
     property alias detailStatusText: detailStatus.text
     property alias detailDescriptionText: detailDescription.text
     property alias detailRecurringRuleText: detailRecurringRule.text
-
-    // TransactionStatus enum (proto int 0-3) -> human label. No app-wide status map exists
-    // yet; defined inline here, mirroring how CreateAccountForm hardcodes its AccountType map.
-    function statusLabel(status) {
-        switch (status) {
-        case 1: return "Projected"
-        case 2: return "Scheduled"
-        case 3: return "Reconciled"
-        default: return "Unspecified"
-        }
-    }
-
-    // Signed int64 cents -> sign-correct currency. Math.abs keeps the "-" ahead of the "$"
-    // ("-$12.34", not "$-12.34").
-    // TODO: lift this (and statusLabel) into a shared helper once #38's record form needs it.
-    function formatAmount(cents) {
-        return (cents < 0 ? "-$" : "$") + Math.abs(cents / 100).toFixed(2)
-    }
+    // Test surface: the panel spec reaches the embedded record form through this.
+    property alias recordForm: recordTxForm
 
     function onAccountSelected() {
         // Drop any prior detail selection: the incoming list is a different account's.
         list.currentIndex = -1
+        // Read the freshly-changed index directly rather than the derived currentAccountId:
+        // inside this change handler that binding can still hold its pre-change value (the
+        // dependent binding is not guaranteed re-evaluated before this explicit handler runs).
         if (accountCombo.currentIndex >= 0 && client) {
             var account = accounts[accountCombo.currentIndex]
             if (account)
@@ -108,6 +104,23 @@ Item {
             currentIndex: -1
             displayText: currentIndex < 0 ? "Select an account…" : currentText
             onCurrentIndexChanged: panel.onAccountSelected()
+        }
+
+        // Record-transaction form, seated above the master-detail content and fed by the
+        // selector above it (no second account picker). Disabled until the daemon is connected
+        // and an account is chosen — there is nothing to record against otherwise.
+        RecordTransactionForm {
+            id: recordTxForm
+            Layout.fillWidth: true
+            client: panel.client
+            accountId: panel.currentAccountId
+            enabled: panel.connected && panel.currentAccountId !== ""
+            // The daemon persists before transactionRecorded fires, so re-fetching the account
+            // here brings the new row in; the onTransactionsChanged Connection clears selection.
+            onRecorded: {
+                if (panel.currentAccountId !== "")
+                    panel.client.listTransactions(panel.currentAccountId)
+            }
         }
 
         RowLayout {
@@ -152,8 +165,8 @@ Item {
                             elide: Text.ElideRight
                             text: row.modelData.name
                         }
-                        Label { text: panel.statusLabel(row.modelData.status) }
-                        Label { text: panel.formatAmount(row.modelData.amount) }
+                        Label { text: TxFormat.statusLabel(row.modelData.status) }
+                        Label { text: TxFormat.formatAmount(row.modelData.amount) }
                     }
                 }
             }
@@ -186,13 +199,13 @@ Item {
                     Label { text: "Amount"; font.bold: true }
                     Label {
                         id: detailAmount
-                        text: panel.selectedTransaction ? panel.formatAmount(panel.selectedTransaction.amount) : ""
+                        text: panel.selectedTransaction ? TxFormat.formatAmount(panel.selectedTransaction.amount) : ""
                     }
 
                     Label { text: "Status"; font.bold: true }
                     Label {
                         id: detailStatus
-                        text: panel.selectedTransaction ? panel.statusLabel(panel.selectedTransaction.status) : ""
+                        text: panel.selectedTransaction ? TxFormat.statusLabel(panel.selectedTransaction.status) : ""
                     }
 
                     Label { text: "Description"; font.bold: true }

@@ -36,6 +36,12 @@ struct ListTransactionsResult {
     QVariantList transactions;
 };
 
+struct RecordTransactionResult {
+    bool ok = false;
+    QString id;
+    QString errorMessage;
+};
+
 struct TimeSeriesPoint {
     qint64 msecsSinceEpoch;
     double balance;
@@ -56,6 +62,7 @@ class FinchClient : public QObject {
     Q_PROPERTY(bool createAccountInProgress READ createAccountInProgress NOTIFY createAccountInProgressChanged)
     Q_PROPERTY(QVariantList transactions READ transactions NOTIFY transactionsChanged)
     Q_PROPERTY(bool transactionsLoading READ transactionsLoading NOTIFY transactionsLoadingChanged)
+    Q_PROPERTY(bool recordTransactionInProgress READ recordTransactionInProgress NOTIFY recordTransactionInProgressChanged)
     Q_PROPERTY(bool timeSeriesLoading READ timeSeriesLoading NOTIFY timeSeriesLoadingChanged)
     Q_PROPERTY(bool timeSeriesEmpty READ timeSeriesEmpty NOTIFY timeSeriesDataChanged)
     Q_PROPERTY(QStringList timeSeriesAccountIds READ timeSeriesAccountIds NOTIFY timeSeriesDataChanged)
@@ -79,6 +86,7 @@ public:
     bool createAccountInProgress() const { return m_createAccountInProgress; }
     QVariantList transactions() const { return m_transactions; }
     bool transactionsLoading() const { return m_transactionsLoading; }
+    bool recordTransactionInProgress() const { return m_recordTransactionInProgress; }
     bool timeSeriesLoading() const { return m_timeSeriesLoading; }
     bool timeSeriesEmpty() const;
     QStringList timeSeriesAccountIds() const;
@@ -91,6 +99,9 @@ public:
     Q_INVOKABLE void listAccounts();
     Q_INVOKABLE void createAccount(const QString& name, int accountType);
     Q_INVOKABLE void listTransactions(const QString& accountId);
+    Q_INVOKABLE void recordTransaction(const QString& accountId, const QString& date,
+                                       qlonglong amount, const QString& name,
+                                       const QString& description, int status);
     Q_INVOKABLE void fetchTimeSeries(const QString& fromDate, const QString& toDate,
                                      int interval, const QStringList& accountIds);
     Q_INVOKABLE void populateSeries(QObject* series, const QString& accountId);
@@ -106,6 +117,9 @@ signals:
     void accountCreateFailed(QString message);
     void transactionsChanged();
     void transactionsLoadingChanged();
+    void recordTransactionInProgressChanged();
+    void transactionRecorded(QString id);
+    void transactionRecordFailed(QString message);
     void timeSeriesLoadingChanged();
     void timeSeriesDataChanged();
 
@@ -115,6 +129,7 @@ private slots:
     void onListAccountsFinished();
     void onCreateAccountFinished();
     void onListTransactionsFinished();
+    void onRecordTransactionFinished();
     void onTimeSeriesFinished();
 
 private:
@@ -147,6 +162,8 @@ private:
     QString m_requestedTransactionsAccountId;
     QString m_inFlightTransactionsAccountId;
     QFutureWatcher<ListTransactionsResult> m_transactionsWatcher;
+    bool m_recordTransactionInProgress = false;
+    QFutureWatcher<RecordTransactionResult> m_recordTransactionWatcher;
     bool m_timeSeriesLoading = false;
     QFutureWatcher<TimeSeriesResult> m_timeSeriesWatcher;
     TimeSeriesResult m_timeSeriesData;
