@@ -18,11 +18,19 @@ Before using a Qt API, check its "since" version annotation against the **pinned
 
 Qt Quick Controls types mark many properties as FINAL. NEVER declare custom properties that shadow built-in names (e.g., `currentValue` on `ComboBox`). The QML engine will error with "Cannot override FINAL property" at runtime.
 
+## QML Numeric Property Width
+
+A QML `int` is 32-bit. A value in cents — which the daemon and proto carry as 64-bit `int64` — overflows a QML `int` above ~21.5 million cents (~$214,748.36) and silently records a truncated amount. Type any property holding cents, or any value that crosses into a C++ `qlonglong` / proto `int64` sink, as `var` (a JS number marshals to `qlonglong` exactly for integers up to 2^53), never `int`. The narrowing is silent — no compile error, no runtime warning — so the thing that catches it is a boundary test with an amount past `INT32_MAX`, not code reading.
+
 ## Qt Quick Layouts
 
 A `Layout` nested directly inside another `Layout` (e.g. a `ColumnLayout` rail inside a `RowLayout`) defaults `Layout.fillWidth`/`Layout.fillHeight` to **true** — unlike plain Items and controls, which default false. A fixed-size child therefore expands and starves its siblings. To pin a sidebar/rail at a fixed width, set `Layout.fillWidth: false` explicitly plus `Layout.preferredWidth`/`minimumWidth`/`maximumWidth`. Headless tests that assert child existence rather than geometry will not catch this.
 
 NEVER bind a child's `Layout.preferredWidth`/`preferredHeight` to its parent layout's own size (e.g. `Layout.preferredWidth: parent.width * 0.55` inside the `RowLayout` being sized). The parent sizes from the child, so the binding feeds back and Qt aborts the pass with "Detected recursive rearrange. Aborting after two iterations" — a runtime warning headless tests spam but still pass through, so only a runtime log surfaces it. Split the space with `Layout.fillWidth` on the children instead. Same feedback for a `ListView` delegate: give the `ItemDelegate` a fixed `width` (`ListView.view.width`) and size its height from content, rather than nesting a `fillWidth` layout as the delegate's `contentItem`.
+
+## Binding Freshness in Change Handlers
+
+Inside an `onXChanged` handler, a *derived* property that depends on `x` may still hold its pre-change value — the engine does not guarantee the dependent binding is re-evaluated before the explicit handler runs. Read the source property that changed (`x`) directly in the handler; reserve the derived property for ordinary bindings and other handlers, which run after re-evaluation. Seen as: a `ComboBox.onCurrentIndexChanged` handler read a `currentAccountId` derived from `currentIndex`, got the *previous* account, and the first selection out of an unselected state silently did nothing.
 
 ## Qt Charts Gotchas
 

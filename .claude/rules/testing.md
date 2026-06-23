@@ -18,6 +18,10 @@ Shared helpers (`openTestDB`, `createTestAccount`, `date()`) live in `*_test.go`
 
 Test domain invariants, validation boundaries, error conditions, and event production. Do NOT test framework plumbing, generated code, or trivial getters/setters. A test earns its keep by catching regressions in behavior that matters.
 
+## Boundary Values
+
+A value that crosses a type or representation boundary — narrowed to a smaller integer width, marshaled across a language seam (QML ↔ C++ ↔ proto), or carrying money as integer cents — earns explicit boundary tests, not just representative ones. Example-based tests cover only the magnitudes the author imagined; a 32-bit overflow or an edge sign error hides between $12.34 and $50. Probe the edges: zero, a value past the narrower type's max, a large amount, a negative. The generated extreme catches the defect no reviewer suspected.
+
 ## Qt App
 
 The Qt app has a Qt Quick Test suite, run via `just test-app` (which builds the app, then runs the specs). A spec drives the real shipping component with an injected mock client and asserts on the calls that component makes — so behavior is verified, not just compilation. Build verification alone is no longer the ceiling; a form or view with input validation or data mutation earns a spec. See `qt-app.md` for the harness mechanics (test-only QML module, mock injection, headless/style settings).
