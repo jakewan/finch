@@ -107,11 +107,14 @@ func (s *Server) CreateRecurringRule(ctx context.Context, req *finchv1.CreateRec
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, status.Error(codes.InvalidArgument, "name must not be empty")
 	}
-	if req.AccountId == "" {
+	if strings.TrimSpace(req.AccountId) == "" {
 		return nil, status.Error(codes.InvalidArgument, "account_id must not be empty")
 	}
 	if req.Frequency == finchv1.Frequency_FREQUENCY_UNSPECIFIED {
 		return nil, status.Error(codes.InvalidArgument, "frequency must be specified")
+	}
+	if req.Frequency < finchv1.Frequency_FREQUENCY_WEEKLY || req.Frequency > finchv1.Frequency_FREQUENCY_YEARLY {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid frequency: %d", req.Frequency)
 	}
 
 	// Validate the frequency-conditional day fields at the boundary so a bad request

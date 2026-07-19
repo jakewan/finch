@@ -291,6 +291,21 @@ func TestCreateRecurringRuleValidationReturnsInvalidArgument(t *testing.T) {
 				SemiMonthlyDays: []int32{15},
 			},
 		},
+		{
+			name: "whitespace account_id",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: "   ", Name: "Rent", Amount: -150000,
+				Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+				DayOfMonth: 1,
+			},
+		},
+		{
+			name: "out-of-range frequency value",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "Rent", Amount: -150000,
+				Frequency: finchv1.Frequency(99), StartDate: "2025-01-01",
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
