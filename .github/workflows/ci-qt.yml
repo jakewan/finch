@@ -25,7 +25,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Qt is pinned to an exact version independent of the runner's apt packages,
       # which lag (Ubuntu 24.04 ships 6.4.2). The pinned version is the project's API

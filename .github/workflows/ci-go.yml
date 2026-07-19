@@ -31,7 +31,7 @@ jobs:
       go: ${{ steps.filter.outputs.go }}
       proto: ${{ steps.filter.outputs.proto }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
         id: filter
         with:
@@ -57,7 +57,7 @@ jobs:
     if: ${{ needs.changes.outputs.go == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
@@ -108,7 +108,7 @@ jobs:
     if: ${{ needs.changes.outputs.proto == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: bufbuild/buf-action@v1
         with:
