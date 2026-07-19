@@ -114,6 +114,26 @@ func (s *Server) CreateRecurringRule(ctx context.Context, req *finchv1.CreateRec
 		return nil, status.Error(codes.InvalidArgument, "frequency must be specified")
 	}
 
+	// Validate the frequency-conditional day fields at the boundary so a bad request
+	// surfaces as InvalidArgument. Core re-validates these (defense in depth), but core
+	// returns untyped errors, so without this check they would reach the caller as
+	// Internal. The exactly-two check also guards the [2]int mapping below.
+	switch req.Frequency {
+	case finchv1.Frequency_FREQUENCY_MONTHLY:
+		if req.DayOfMonth < 1 || req.DayOfMonth > 31 {
+			return nil, status.Errorf(codes.InvalidArgument, "day_of_month must be 1-31 for monthly frequency, got %d", req.DayOfMonth)
+		}
+	case finchv1.Frequency_FREQUENCY_SEMI_MONTHLY:
+		if len(req.SemiMonthlyDays) != 2 {
+			return nil, status.Errorf(codes.InvalidArgument, "semi_monthly frequency requires exactly two semi_monthly_days, got %d", len(req.SemiMonthlyDays))
+		}
+		for _, d := range req.SemiMonthlyDays {
+			if d < 1 || d > 31 {
+				return nil, status.Errorf(codes.InvalidArgument, "semi_monthly_days must each be 1-31, got %d", d)
+			}
+		}
+	}
+
 	startDate, err := time.Parse(time.DateOnly, req.StartDate)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid start_date: %v", err)
@@ -173,7 +193,7 @@ func (s *Server) UpdateRecurringRuleAmount(ctx context.Context, req *finchv1.Upd
 		return nil, status.Errorf(codes.InvalidArgument, "invalid effective_date: %v", err)
 	}
 	if err := s.db.UpdateRecurringRuleAmount(ctx, req.RuleId, req.NewAmount, effectiveDate, req.Reason); err != nil {
-		return nil, status.Errorf(codes.Internal, "update recurring rule amount: %v", err)
+		return nil, ruleError("update recurring rule amount", err)
 	}
 	return &finchv1.UpdateRecurringRuleAmountResponse{}, nil
 }
