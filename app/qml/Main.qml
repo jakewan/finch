@@ -100,10 +100,11 @@ ApplicationWindow {
                 connected: finchClient.connectionState === FinchClient.Connected
             },
 
-            PlaceholderScreen {
+            RecurringRulesPanel {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                headline: "Recurring Rules"
+                client: finchClient
+                connected: finchClient.connectionState === FinchClient.Connected
             }
         ]
     }

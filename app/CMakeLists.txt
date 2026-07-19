@@ -81,6 +81,7 @@ qt_add_qml_module(finch-app
         qml/AccountsPanel.qml
         qml/TransactionsPanel.qml
         qml/RecordTransactionForm.qml
+        qml/RecurringRulesPanel.qml
         qml/CreateRecurringRuleForm.qml
         qml/txformat.js
         qml/PlaceholderScreen.qml
@@ -250,4 +251,34 @@ target_link_libraries(tst_recurringruleform PRIVATE
 add_test(NAME tst_recurringruleform COMMAND tst_recurringruleform)
 
 set_tests_properties(tst_recurringruleform PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic")
+
+# --- RecurringRulesPanel test ---
+add_executable(tst_recurringrulespanel tests/tst_recurringrulespanel.cpp)
+
+# A test-only module scoped to the real master-detail panel, the create form it embeds, the
+# txformat.js helper both import, and the shared mock client.
+qt_add_qml_module(tst_recurringrulespanel
+    URI FinchRecurringPanelTest
+    VERSION 1.0
+    QML_FILES
+        qml/RecurringRulesPanel.qml
+        qml/CreateRecurringRuleForm.qml
+        qml/txformat.js
+        tests/MockFinchClient.qml
+)
+
+target_compile_definitions(tst_recurringrulespanel PRIVATE
+    QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/recurringrulespanel")
+
+target_link_libraries(tst_recurringrulespanel PRIVATE
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::QuickTest
+    Qt6::Qml
+)
+
+add_test(NAME tst_recurringrulespanel COMMAND tst_recurringrulespanel)
+
+set_tests_properties(tst_recurringrulespanel PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic")

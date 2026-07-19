@@ -19,3 +19,16 @@ function statusLabel(status) {
 function formatAmount(cents) {
     return (cents < 0 ? "-$" : "$") + Math.abs(cents / 100).toFixed(2)
 }
+
+// Frequency enum (proto int 1-5) -> human label. Mirrors the proto values (Weekly=1 …
+// Yearly=5); 0 is the unspecified sentinel, which a stored rule never carries.
+function frequencyLabel(frequency) {
+    switch (frequency) {
+    case 1: return "Weekly"
+    case 2: return "Biweekly"
+    case 3: return "Semi-monthly"
+    case 4: return "Monthly"
+    case 5: return "Yearly"
+    default: return "Unspecified"
+    }
+}

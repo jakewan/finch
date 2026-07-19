@@ -24,6 +24,18 @@ QtObject {
     // account switch rather than an unrealistic two-concurrent-fetch model.
     property string inFlightAccountId: ""
 
+    // RecurringRulesPanel binds its ListView model to this; default empty so the binding is
+    // clean. succeedRecurringRules() ASSIGNS it (not just emits) so the bound list refreshes.
+    property var recurringRules: []
+    property string lastRulesAccountId: ""
+    property int recurringRulesCallCount: 0
+    property bool recurringRulesLoading: false
+    // Account-id-keyed single-in-flight reconciliation, faithful to the real client's
+    // listRecurringRules (mirrors the listTransactions pattern): the account the running fetch
+    // is for vs. the account most recently requested. When they diverge, the stale completion
+    // is discarded and the requested account re-fetched.
+    property string inFlightRulesAccountId: ""
+
     // RecordTransactionForm (embedded in TransactionsPanel) drives these; default in-progress
     // false so the embedded form starts enabled. Each field is captured separately so a spec
     // can catch a name<->description transpose in the 6-arg positional call.
@@ -123,6 +135,33 @@ QtObject {
     function failCreateRecurringRule(message) {
         createRecurringRuleInProgress = false
         recurringRuleCreateFailed(message)
+    }
+
+    // Mirrors the real client's account-id-keyed single-in-flight reconciliation, exactly like
+    // listTransactions/succeedTransactions above: a second request while a fetch is in flight
+    // is recorded as the new requested account but does NOT start a concurrent fetch.
+    function listRecurringRules(accountId) {
+        lastRulesAccountId = accountId
+        recurringRulesCallCount += 1
+        if (recurringRulesLoading)
+            return
+        inFlightRulesAccountId = accountId
+        recurringRulesLoading = true
+        recurringRules = []
+    }
+
+    // Completes the in-flight fetch; assigning `recurringRules` is the notification the panel's
+    // model binding reacts to. If a newer account was requested meanwhile, discard `list` and
+    // re-enter the in-flight state for the requested account.
+    function succeedRecurringRules(list) {
+        recurringRulesLoading = false
+        if (inFlightRulesAccountId !== lastRulesAccountId) {
+            inFlightRulesAccountId = lastRulesAccountId
+            recurringRulesLoading = true
+            recurringRules = []
+            return
+        }
+        recurringRules = list
     }
 
     // callCount counts invocations (every call). The re-entrancy guard mirrors the real
