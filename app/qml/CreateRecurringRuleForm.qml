@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "txformat.js" as TxFormat
 
 // Self-contained recurring-rule create form. Like RecordTransactionForm it depends only on an
 // injected `client` (the production FinchClient, a mock in tests) and an injected `accountId`
@@ -18,7 +17,7 @@ Item {
 
     // Public, test-facing surface — specs drive the form through these.
     property alias nameText: nameField.text
-    property alias amountText: amountField.text
+    property alias amountText: amountInput.amountText
     property alias startDateText: startDateField.text
     property alias endDateText: endDateField.text
     property alias dayOfMonthText: dayOfMonthField.text
@@ -26,9 +25,9 @@ Item {
     property alias semiDay2Text: semiDay2Field.text
     property alias frequencyIndex: freqCombo.currentIndex
     property alias errorText: errorLabel.text
-    // Expense (true, default) vs Income. The magnitude field cannot carry a sign, so this
-    // toggle alone decides whether cents are negative or positive.
-    property bool expense: true
+    // Amount, its sign, and the signed-cents derivation live in the shared SignedAmountField.
+    property alias expense: amountInput.expense
+    readonly property var signedCents: amountInput.signedCents
 
     // Frequency enum values (proto Frequency): Weekly=1 … Yearly=5. The ComboBox has no
     // sentinel row (currentIndex starts -1 with a placeholder), so a row's index is one less
@@ -36,15 +35,6 @@ Item {
     readonly property bool frequencyChosen: freqCombo.currentIndex >= 0
     readonly property bool isMonthly: frequencyChosen && freqCombo.currentValue === 4
     readonly property bool isSemiMonthly: frequencyChosen && freqCombo.currentValue === 3
-
-    // Amount: same treatment as RecordTransactionForm. The regex validator forbids a sign, so
-    // the Expense/Income toggle is the sole sign source; parseFloat reads the magnitude cleanly.
-    readonly property real magnitude: parseFloat(amountField.text)
-    readonly property bool amountValid: !isNaN(magnitude) && magnitude > 0
-    // Typed var, not int: the client's amount is a 64-bit qlonglong and a QML int is 32-bit —
-    // an int would overflow above ~$21.5M. A JS number marshals to qlonglong exactly (< 2^53).
-    readonly property var signedCents: amountValid ? Math.round(magnitude * 100) * (expense ? -1 : 1) : 0
-    readonly property string previewText: amountValid ? TxFormat.formatAmount(signedCents) : ""
 
     // Day-of-month (Monthly) and the two semi-monthly days must each be 1-31 — mirroring core's
     // validation so a request the daemon would reject never leaves the form.
@@ -68,7 +58,7 @@ Item {
     readonly property bool canSubmit:
         accountId !== ""
         && nameField.text.trim().length > 0
-        && amountValid
+        && amountInput.amountValid
         && frequencyChosen
         && startDateValid
         && endDateOrderValid
@@ -98,7 +88,7 @@ Item {
         target: form.client
         function onRecurringRuleCreated(id) {
             nameField.text = ""
-            amountField.text = ""
+            amountInput.amountText = ""
             dayOfMonthField.text = ""
             semiDay1Field.text = ""
             semiDay2Field.text = ""
@@ -124,42 +114,10 @@ Item {
         }
 
         Label { text: "Amount" }
-        RowLayout {
+        SignedAmountField {
+            id: amountInput
             Layout.fillWidth: true
-            spacing: 12
-
-            TextField {
-                id: amountField
-                Layout.fillWidth: true
-                placeholderText: "0.00"
-                inputMethodHints: Qt.ImhFormattedNumbersOnly
-                // Locale-independent, forbids a leading "-" so the toggle is the sole sign
-                // source, caps at 2 decimals — same validator as the transaction form.
-                validator: RegularExpressionValidator { regularExpression: /^\d+(\.\d{0,2})?$/ }
-                onTextChanged: errorLabel.text = ""
-            }
-
-            Label {
-                text: form.previewText
-                color: form.expense ? "#c0392b" : "#27ae60"
-                visible: form.previewText.length > 0
-            }
-        }
-
-        RowLayout {
-            spacing: 12
-            ButtonGroup { id: signGroup }
-            RadioButton {
-                text: "Expense"
-                ButtonGroup.group: signGroup
-                checked: form.expense
-                onClicked: { form.expense = true; errorLabel.text = "" }
-            }
-            RadioButton {
-                text: "Income"
-                ButtonGroup.group: signGroup
-                onClicked: { form.expense = false; errorLabel.text = "" }
-            }
+            onEdited: errorLabel.text = ""
         }
 
         Label { text: "Frequency" }

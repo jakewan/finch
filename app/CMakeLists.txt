@@ -81,6 +81,7 @@ qt_add_qml_module(finch-app
         qml/AccountsPanel.qml
         qml/TransactionsPanel.qml
         qml/RecordTransactionForm.qml
+        qml/SignedAmountField.qml
         qml/RecurringRulesPanel.qml
         qml/CreateRecurringRuleForm.qml
         qml/txformat.js
@@ -173,6 +174,7 @@ qt_add_qml_module(tst_transactionspanel
     QML_FILES
         qml/TransactionsPanel.qml
         qml/RecordTransactionForm.qml
+        qml/SignedAmountField.qml
         qml/txformat.js
         tests/MockFinchClient.qml
 )
@@ -204,6 +206,7 @@ qt_add_qml_module(tst_recordtransactionform
     VERSION 1.0
     QML_FILES
         qml/RecordTransactionForm.qml
+        qml/SignedAmountField.qml
         qml/txformat.js
         tests/MockFinchClient.qml
 )
@@ -234,6 +237,7 @@ qt_add_qml_module(tst_recurringruleform
     VERSION 1.0
     QML_FILES
         qml/CreateRecurringRuleForm.qml
+        qml/SignedAmountField.qml
         qml/txformat.js
         tests/MockFinchClient.qml
 )
@@ -264,6 +268,7 @@ qt_add_qml_module(tst_recurringrulespanel
     QML_FILES
         qml/RecurringRulesPanel.qml
         qml/CreateRecurringRuleForm.qml
+        qml/SignedAmountField.qml
         qml/txformat.js
         tests/MockFinchClient.qml
 )
