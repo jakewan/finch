@@ -18,6 +18,12 @@ Before using a Qt API, check its "since" version annotation against the **pinned
 
 Qt Quick Controls types mark many properties as FINAL. NEVER declare custom properties that shadow built-in names (e.g., `currentValue` on `ComboBox`). The QML engine will error with "Cannot override FINAL property" at runtime.
 
+## ComboBox Enum Submission and Test Coverage
+
+A form ComboBox that submits a proto enum value must read `currentValue` (via `valueRole`), never `currentIndex`. The two coincide — and hide the bug — when a sentinel row sits at index 0 over a contiguous `1..N` enum: the row index then equals the enum value at every row, so a spec asserting the submitted value passes even if the code wrongly submits `currentIndex`.
+
+To keep the value-vs-index distinction testable, prefer the account-selector pattern — `currentIndex: -1` with a placeholder `displayText` and no sentinel row — so a row's index is one less than its enum value. A spec that then asserts the submitted enum value genuinely catches a `currentIndex`-for-`currentValue` bug. Reserve the sentinel-row form for models whose values aren't a contiguous run from 1.
+
 ## QML Numeric Property Width
 
 A QML `int` is 32-bit. A value in cents — which the daemon and proto carry as 64-bit `int64` — overflows a QML `int` above ~21.5 million cents (~$214,748.36) and silently records a truncated amount. Type any property holding cents, or any value that crosses into a C++ `qlonglong` / proto `int64` sink, as `var` (a JS number marshals to `qlonglong` exactly for integers up to 2^53), never `int`. The narrowing is silent — no compile error, no runtime warning — so the thing that catches it is a boundary test with an amount past `INT32_MAX`, not code reading.
