@@ -24,6 +24,18 @@ QtObject {
     // account switch rather than an unrealistic two-concurrent-fetch model.
     property string inFlightAccountId: ""
 
+    // RecurringRulesPanel binds its ListView model to this; default empty so the binding is
+    // clean. succeedRecurringRules() ASSIGNS it (not just emits) so the bound list refreshes.
+    property var recurringRules: []
+    property string lastRulesAccountId: ""
+    property int recurringRulesCallCount: 0
+    property bool recurringRulesLoading: false
+    // Account-id-keyed single-in-flight reconciliation, faithful to the real client's
+    // listRecurringRules (mirrors the listTransactions pattern): the account the running fetch
+    // is for vs. the account most recently requested. When they diverge, the stale completion
+    // is discarded and the requested account re-fetched.
+    property string inFlightRulesAccountId: ""
+
     // RecordTransactionForm (embedded in TransactionsPanel) drives these; default in-progress
     // false so the embedded form starts enabled. Each field is captured separately so a spec
     // can catch a name<->description transpose in the 6-arg positional call.
@@ -36,10 +48,26 @@ QtObject {
     property int lastRecordStatus: -1
     property int recordCallCount: 0
 
+    // CreateRecurringRuleForm drives these; default in-progress false so the form starts
+    // enabled. Each arg is captured separately so a spec can catch a transpose in the 8-arg
+    // positional call.
+    property bool createRecurringRuleInProgress: false
+    property string lastCreateAccountId: ""
+    property string lastCreateName: ""
+    property var lastCreateAmount: 0
+    property int lastCreateFrequency: -1
+    property string lastCreateStartDate: ""
+    property string lastCreateEndDate: ""
+    property int lastCreateDayOfMonth: -1
+    property var lastCreateSemiMonthlyDays: []
+    property int createRecurringRuleCallCount: 0
+
     signal accountCreated(string id)
     signal accountCreateFailed(string message)
     signal transactionRecorded(string id)
     signal transactionRecordFailed(string message)
+    signal recurringRuleCreated(string id)
+    signal recurringRuleCreateFailed(string message)
 
     // Mirror the real client's observable lifecycle: in-progress latches true on the
     // call and clears when the test drives a terminal outcome via succeed()/fail().
@@ -82,6 +110,58 @@ QtObject {
     function failRecord(message) {
         recordTransactionInProgress = false
         transactionRecordFailed(message)
+    }
+
+    // Mirror the real client: in-progress latches true synchronously on the call and clears
+    // when the test drives a terminal outcome via succeed/failCreateRecurringRule().
+    function createRecurringRule(accountId, name, amount, frequency, startDate, endDate, dayOfMonth, semiMonthlyDays) {
+        lastCreateAccountId = accountId
+        lastCreateName = name
+        lastCreateAmount = amount
+        lastCreateFrequency = frequency
+        lastCreateStartDate = startDate
+        lastCreateEndDate = endDate
+        lastCreateDayOfMonth = dayOfMonth
+        lastCreateSemiMonthlyDays = semiMonthlyDays
+        createRecurringRuleCallCount += 1
+        createRecurringRuleInProgress = true
+    }
+
+    function succeedCreateRecurringRule(id) {
+        createRecurringRuleInProgress = false
+        recurringRuleCreated(id)
+    }
+
+    function failCreateRecurringRule(message) {
+        createRecurringRuleInProgress = false
+        recurringRuleCreateFailed(message)
+    }
+
+    // Mirrors the real client's account-id-keyed single-in-flight reconciliation, exactly like
+    // listTransactions/succeedTransactions above: a second request while a fetch is in flight
+    // is recorded as the new requested account but does NOT start a concurrent fetch.
+    function listRecurringRules(accountId) {
+        lastRulesAccountId = accountId
+        recurringRulesCallCount += 1
+        if (recurringRulesLoading)
+            return
+        inFlightRulesAccountId = accountId
+        recurringRulesLoading = true
+        recurringRules = []
+    }
+
+    // Completes the in-flight fetch; assigning `recurringRules` is the notification the panel's
+    // model binding reacts to. If a newer account was requested meanwhile, discard `list` and
+    // re-enter the in-flight state for the requested account.
+    function succeedRecurringRules(list) {
+        recurringRulesLoading = false
+        if (inFlightRulesAccountId !== lastRulesAccountId) {
+            inFlightRulesAccountId = lastRulesAccountId
+            recurringRulesLoading = true
+            recurringRules = []
+            return
+        }
+        recurringRules = list
     }
 
     // callCount counts invocations (every call). The re-entrancy guard mirrors the real

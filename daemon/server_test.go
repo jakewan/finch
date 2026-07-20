@@ -10,7 +10,9 @@ import (
 	"github.com/jakewan/finch/daemon/finchd"
 	finchv1 "github.com/jakewan/finch/daemon/gen/finch/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 )
 
@@ -237,6 +239,117 @@ func TestProjectBalancesViaGRPC(t *testing.T) {
 	}
 	if len(projResp.Balances) == 0 {
 		t.Fatal("expected non-empty balances")
+	}
+}
+
+// createRulesAccount is a small helper for the recurring-rule error tests below.
+func createRulesAccount(t *testing.T, client finchv1.FinchServiceClient, ctx context.Context) string {
+	t.Helper()
+	acct, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
+		Name: "Rules Acct",
+		Type: finchv1.AccountType_ACCOUNT_TYPE_CHECKING,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+	return acct.Account.Id
+}
+
+// A malformed recurring-rule create is the caller's fault, so it must surface as
+// InvalidArgument (not Internal) — callers depend on the code to tell a bad request
+// from a daemon failure (see .claude/rules/api-design.md).
+func TestCreateRecurringRuleValidationReturnsInvalidArgument(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+	accountID := createRulesAccount(t, client, ctx)
+
+	cases := []struct {
+		name string
+		req  *finchv1.CreateRecurringRuleRequest
+	}{
+		{
+			name: "monthly day_of_month out of range",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "Rent", Amount: -150000,
+				Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+				DayOfMonth: 40,
+			},
+		},
+		{
+			name: "semi-monthly day out of range",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "Paycheck", Amount: 200000,
+				Frequency: finchv1.Frequency_FREQUENCY_SEMI_MONTHLY, StartDate: "2025-01-01",
+				SemiMonthlyDays: []int32{15, 40},
+			},
+		},
+		{
+			name: "semi-monthly wrong day count",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "Paycheck", Amount: 200000,
+				Frequency: finchv1.Frequency_FREQUENCY_SEMI_MONTHLY, StartDate: "2025-01-01",
+				SemiMonthlyDays: []int32{15},
+			},
+		},
+		{
+			name: "whitespace account_id",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: "   ", Name: "Rent", Amount: -150000,
+				Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+				DayOfMonth: 1,
+			},
+		},
+		{
+			name: "out-of-range frequency value",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "Rent", Amount: -150000,
+				Frequency: finchv1.Frequency(99), StartDate: "2025-01-01",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := client.CreateRecurringRule(ctx, tc.req)
+			if status.Code(err) != codes.InvalidArgument {
+				t.Fatalf("expected InvalidArgument, got %v (err: %v)", status.Code(err), err)
+			}
+		})
+	}
+}
+
+// A valid semi-monthly rule must still be accepted — guards against over-gating
+// the count/range validation added above.
+func TestCreateRecurringRuleSemiMonthlyValid(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+	accountID := createRulesAccount(t, client, ctx)
+
+	resp, err := client.CreateRecurringRule(ctx, &finchv1.CreateRecurringRuleRequest{
+		AccountId: accountID, Name: "Paycheck", Amount: 200000,
+		Frequency: finchv1.Frequency_FREQUENCY_SEMI_MONTHLY, StartDate: "2025-01-01",
+		SemiMonthlyDays: []int32{1, 15},
+	})
+	if err != nil {
+		t.Fatalf("CreateRecurringRule: %v", err)
+	}
+	if resp.Rule.Id == "" {
+		t.Fatal("expected non-empty rule ID")
+	}
+}
+
+// Updating a rule that does not exist is a NotFound, not an Internal error — the
+// other rule mutations (pause/resume/end) already map this correctly.
+func TestUpdateRecurringRuleAmountNotFound(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+
+	_, err := client.UpdateRecurringRuleAmount(ctx, &finchv1.UpdateRecurringRuleAmountRequest{
+		RuleId:        "does-not-exist",
+		NewAmount:     -1000,
+		EffectiveDate: "2025-02-01",
+	})
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("expected NotFound for missing rule, got %v (err: %v)", status.Code(err), err)
 	}
 }
 

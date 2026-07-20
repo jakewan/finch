@@ -31,6 +31,10 @@ FinchClient::FinchClient(const QString& socketPath, QObject* parent)
             this, &FinchClient::onListTransactionsFinished);
     connect(&m_recordTransactionWatcher, &QFutureWatcher<RecordTransactionResult>::finished,
             this, &FinchClient::onRecordTransactionFinished);
+    connect(&m_createRecurringRuleWatcher, &QFutureWatcher<CreateRecurringRuleResult>::finished,
+            this, &FinchClient::onCreateRecurringRuleFinished);
+    connect(&m_recurringRulesWatcher, &QFutureWatcher<ListRecurringRulesResult>::finished,
+            this, &FinchClient::onListRecurringRulesFinished);
     connect(&m_timeSeriesWatcher, &QFutureWatcher<TimeSeriesResult>::finished,
             this, &FinchClient::onTimeSeriesFinished);
 }
@@ -42,6 +46,8 @@ FinchClient::~FinchClient()
     m_createAccountWatcher.waitForFinished();
     m_transactionsWatcher.waitForFinished();
     m_recordTransactionWatcher.waitForFinished();
+    m_createRecurringRuleWatcher.waitForFinished();
+    m_recurringRulesWatcher.waitForFinished();
     m_timeSeriesWatcher.waitForFinished();
 }
 
@@ -288,6 +294,144 @@ void FinchClient::recordTransaction(const QString& accountId, const QString& dat
     m_recordTransactionWatcher.setFuture(future);
 }
 
+void FinchClient::createRecurringRule(const QString& accountId, const QString& name,
+                                      qlonglong amount, int frequency,
+                                      const QString& startDate, const QString& endDate,
+                                      int dayOfMonth, const QVariantList& semiMonthlyDays)
+{
+    // Authoritative re-entrancy guard, mirroring createAccount/recordTransaction: the QML
+    // submit-disable is cosmetic, so without this a rapid double-submit could create two rules.
+    if (m_createRecurringRuleInProgress)
+        return;
+
+    m_createRecurringRuleInProgress = true;
+    emit createRecurringRuleInProgressChanged();
+
+    auto stub = m_stub.get();
+    std::string accountIdStr = accountId.toStdString();
+    std::string nameStr = name.toStdString();
+    std::string startDateStr = startDate.toStdString();
+    std::string endDateStr = endDate.toStdString();
+    QList<int> semiDays;
+    for (const auto& d : semiMonthlyDays)
+        semiDays.append(d.toInt());
+    auto future = QtConcurrent::run([stub, accountIdStr, nameStr, amount, frequency,
+                                     startDateStr, endDateStr, dayOfMonth,
+                                     semiDays]() -> CreateRecurringRuleResult {
+        grpc::ClientContext context;
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
+
+        finch::v1::CreateRecurringRuleRequest request;
+        request.set_account_id(accountIdStr);
+        request.set_name(nameStr);
+        request.set_amount(amount);
+        request.set_frequency(static_cast<finch::v1::Frequency>(frequency));
+        request.set_start_date(startDateStr);
+        request.set_end_date(endDateStr);
+        request.set_day_of_month(dayOfMonth);
+        for (int d : semiDays)
+            request.add_semi_monthly_days(d);
+        // Transfers are a distinct create mode not yet exposed in the UI.
+        request.set_is_transfer(false);
+
+        finch::v1::CreateRecurringRuleResponse response;
+        grpc::Status grpcStatus = stub->CreateRecurringRule(&context, request, &response);
+
+        CreateRecurringRuleResult result;
+        if (grpcStatus.ok()) {
+            result.ok = true;
+            result.id = QString::fromStdString(response.rule().id());
+            return result;
+        }
+
+        // Surface the daemon's validation message verbatim (user-facing and specific — the
+        // daemon now returns InvalidArgument for out-of-range day fields); everything else gets
+        // a generic message. status lives only on this worker thread, so copy it into result.
+        switch (grpcStatus.error_code()) {
+        case grpc::StatusCode::INVALID_ARGUMENT:
+            result.errorMessage = QString::fromStdString(grpcStatus.error_message());
+            break;
+        case grpc::StatusCode::UNAVAILABLE:
+            result.errorMessage = QStringLiteral("Could not reach the daemon.");
+            break;
+        case grpc::StatusCode::DEADLINE_EXCEEDED:
+            result.errorMessage = QStringLiteral("The request timed out. Please try again.");
+            break;
+        default:
+            result.errorMessage = QStringLiteral("Could not create the rule. Please try again.");
+            break;
+        }
+        return result;
+    });
+
+    m_createRecurringRuleWatcher.setFuture(future);
+}
+
+void FinchClient::listRecurringRules(const QString& accountId)
+{
+    m_requestedRecurringRulesAccountId = accountId;
+    // A fetch is already in flight; do not start a concurrent one (a second QtConcurrent task
+    // would no longer be waited on by the destructor). onListRecurringRulesFinished reconciles
+    // to the requested account once it lands.
+    if (m_recurringRulesLoading)
+        return;
+
+    startRecurringRulesFetch();
+}
+
+void FinchClient::startRecurringRulesFetch()
+{
+    m_recurringRulesLoading = true;
+    m_inFlightRecurringRulesAccountId = m_requestedRecurringRulesAccountId;
+    emit recurringRulesLoadingChanged();
+
+    // Clear immediately so the in-flight window never shows the previously loaded account's
+    // rules under the newly selected account (the panel binds its list to this).
+    m_recurringRules.clear();
+    emit recurringRulesChanged();
+
+    auto stub = m_stub.get();
+    std::string id = m_inFlightRecurringRulesAccountId.toStdString();
+    auto future = QtConcurrent::run([stub, id]() -> ListRecurringRulesResult {
+        grpc::ClientContext context;
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
+
+        finch::v1::ListRecurringRulesRequest request;
+        request.set_account_id(id);
+        finch::v1::ListRecurringRulesResponse response;
+
+        grpc::Status status = stub->ListRecurringRules(&context, request, &response);
+        if (!status.ok())
+            return {false, {}};
+
+        QVariantList rules;
+        for (const auto& rule : response.rules()) {
+            QVariantMap entry;
+            entry["id"] = QString::fromStdString(rule.id());
+            entry["accountId"] = QString::fromStdString(rule.account_id());
+            entry["name"] = QString::fromStdString(rule.name());
+            // Signed cents; the panel formats and applies the sign.
+            entry["amount"] = static_cast<qlonglong>(rule.amount());
+            // Raw Frequency int; the panel maps it to a human label.
+            entry["frequency"] = static_cast<int>(rule.frequency());
+            entry["startDate"] = QString::fromStdString(rule.start_date());
+            entry["endDate"] = QString::fromStdString(rule.end_date());
+            entry["dayOfMonth"] = static_cast<int>(rule.day_of_month());
+            QVariantList semiDays;
+            for (int d : rule.semi_monthly_days())
+                semiDays.append(d);
+            entry["semiMonthlyDays"] = semiDays;
+            entry["isTransfer"] = rule.is_transfer();
+            entry["transferTargetAccountId"] = QString::fromStdString(rule.transfer_target_account_id());
+            entry["paused"] = rule.paused();
+            rules.append(entry);
+        }
+        return {true, rules};
+    });
+
+    m_recurringRulesWatcher.setFuture(future);
+}
+
 void FinchClient::fetchTimeSeries(const QString& fromDate, const QString& toDate,
                                   int interval, const QStringList& accountIds)
 {
@@ -519,6 +663,46 @@ void FinchClient::onRecordTransactionFinished()
     }
 
     emit transactionRecorded(result.id);
+}
+
+void FinchClient::onCreateRecurringRuleFinished()
+{
+    auto result = m_createRecurringRuleWatcher.result();
+
+    m_createRecurringRuleInProgress = false;
+    emit createRecurringRuleInProgressChanged();
+
+    if (!result.ok) {
+        emit recurringRuleCreateFailed(result.errorMessage);
+        return;
+    }
+
+    // Emit only — the panel re-fetches the account's rules on this signal (mirroring the
+    // transaction write path). Do not append to a local model like createAccount does: an
+    // append would be clobbered by the re-fetch's list-clear.
+    emit recurringRuleCreated(result.id);
+}
+
+void FinchClient::onListRecurringRulesFinished()
+{
+    auto result = m_recurringRulesWatcher.result();
+
+    m_recurringRulesLoading = false;
+    emit recurringRulesLoadingChanged();
+
+    // A newer account was selected while this fetch was in flight (a rapid account switch); its
+    // result is for the wrong account. Discard it and fetch the account now selected.
+    if (m_inFlightRecurringRulesAccountId != m_requestedRecurringRulesAccountId) {
+        startRecurringRulesFetch();
+        return;
+    }
+
+    if (result.ok) {
+        m_recurringRules = result.rules;
+    } else {
+        m_recurringRules.clear();
+    }
+    emit recurringRulesChanged();
 }
 
 void FinchClient::onPingFinished()

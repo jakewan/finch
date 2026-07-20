@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Qt app: create accounts through a UI form (previously only via MCP tools).
 - Qt app: view an account's individual transactions on the Transactions screen — pick an account, browse its transactions in a list, and select one to see its full details (previously only the aggregated balance chart was visible).
 - Qt app: record a manual transaction against an account from the Transactions screen — enter a name, amount, and Expense/Income, with a live signed-amount preview and the date defaulting to today (previously only via MCP tools).
+- Qt app: view and create an account's recurring rules on the Recurring Rules screen — pick an account, browse its rules, and add a new rule at any frequency (weekly, biweekly, semi-monthly, monthly, or yearly) with an Expense/Income amount and an optional end date (previously only via MCP tools).
 
 ### Changed
 
@@ -19,3 +20,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Qt app now restores window size and position across restarts.
+- Daemon returns `InvalidArgument` (not `Internal`) when a recurring-rule create has an out-of-range day-of-month or malformed semi-monthly days, and `NotFound` (not `Internal`) when updating the amount of a rule that does not exist — so callers can tell a bad request from a daemon failure.

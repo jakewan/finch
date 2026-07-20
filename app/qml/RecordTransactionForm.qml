@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "txformat.js" as TxFormat
 
 // Self-contained transaction-recording form. Like CreateAccountForm it depends only on an
 // injected `client` (the production FinchClient, a mock in tests) and an injected `accountId`
@@ -19,36 +18,22 @@ Item {
     property string accountId: ""
 
     // Public, test-facing surface — specs drive the form through these rather than reaching
-    // into private control ids.
+    // into private control ids. The amount, its sign, and the signed-cents/preview derivation
+    // live in the shared SignedAmountField (amountInput); the form forwards its surface.
     property alias nameText: nameField.text
-    property alias amountText: amountField.text
+    property alias amountText: amountInput.amountText
     property alias dateText: dateField.text
     property alias descriptionText: descriptionField.text
     property alias errorText: errorLabel.text
-    // Expense (true, default) vs Income. The single sign source: the magnitude field cannot
-    // express a sign, so this toggle alone decides whether cents are negative or positive.
-    property bool expense: true
-
-    // Derived state — one set of predicates shared by canSubmit, the preview, and the button,
-    // so they can never disagree at a boundary.
-    // parseFloat is NaN when the field is blank or non-numeric; the regex validator already
-    // forbids a sign or a comma decimal, so parseFloat reads the magnitude locale-cleanly.
-    readonly property real magnitude: parseFloat(amountField.text)
-    // Reject 0 and NaN: a $0 manual transaction is meaningless, and the daemon does not
-    // validate amount at all, so this form is the sole gate on amount quality.
-    readonly property bool amountValid: !isNaN(magnitude) && magnitude > 0
-    // Math.round avoids float drift (12.34 * 100 -> 1233.9999...); the toggle applies the sign.
-    // Typed var, not int: the client's amount is a 64-bit qlonglong, and a QML int is 32-bit —
-    // an int here would overflow above ~$21.5M and record a truncated amount. A JS number
-    // marshals cleanly to qlonglong (exact integers up to 2^53).
-    readonly property var signedCents: amountValid ? Math.round(magnitude * 100) * (expense ? -1 : 1) : 0
-    readonly property string previewText: amountValid ? TxFormat.formatAmount(signedCents) : ""
+    property alias expense: amountInput.expense
+    readonly property var signedCents: amountInput.signedCents
+    readonly property string previewText: amountInput.previewText
 
     // canSubmit is the single validation predicate the button and the specs share.
     readonly property bool canSubmit:
         accountId !== ""
         && nameField.text.trim().length > 0
-        && amountValid
+        && amountInput.amountValid
         && !(client && client.recordTransactionInProgress)
 
     // Emitted once the daemon confirms the record; the host re-fetches the account on it.
@@ -71,7 +56,7 @@ Item {
         target: form.client
         function onTransactionRecorded(id) {
             nameField.text = ""
-            amountField.text = ""
+            amountInput.amountText = ""
             descriptionField.text = ""
             errorLabel.text = ""
             form.recorded(id)
@@ -95,50 +80,10 @@ Item {
         }
 
         Label { text: "Amount" }
-        RowLayout {
+        SignedAmountField {
+            id: amountInput
             Layout.fillWidth: true
-            spacing: 12
-
-            TextField {
-                id: amountField
-                Layout.fillWidth: true
-                placeholderText: "0.00"
-                inputMethodHints: Qt.ImhFormattedNumbersOnly
-                // Locale-independent: always "." (matching parseFloat), forbids a leading "-"
-                // so the Expense/Income toggle is the sole sign source, caps at 2 decimals.
-                // A default-locale DoubleValidator would accept "19,99", which parseFloat
-                // truncates to 19 — the regex avoids that mismatch.
-                validator: RegularExpressionValidator { regularExpression: /^\d+(\.\d{0,2})?$/ }
-                onTextChanged: errorLabel.text = ""
-            }
-
-            // Live signed-amount preview: the sign is visible before submit, so the user sees
-            // an Expense will subtract before committing it.
-            Label {
-                text: form.previewText
-                color: form.expense ? "#c0392b" : "#27ae60"
-                visible: form.previewText.length > 0
-            }
-        }
-
-        // Expense/Income toggle. The magnitude field cannot carry a sign, so this is the only
-        // way the user expresses direction — a control that can't express the wrong value.
-        RowLayout {
-            spacing: 12
-            ButtonGroup { id: signGroup }
-            RadioButton {
-                id: expenseRadio
-                text: "Expense"
-                ButtonGroup.group: signGroup
-                checked: form.expense
-                onClicked: { form.expense = true; errorLabel.text = "" }
-            }
-            RadioButton {
-                id: incomeRadio
-                text: "Income"
-                ButtonGroup.group: signGroup
-                onClicked: { form.expense = false; errorLabel.text = "" }
-            }
+            onEdited: errorLabel.text = ""
         }
 
         Label { text: "Date" }

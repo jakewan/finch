@@ -42,6 +42,17 @@ struct RecordTransactionResult {
     QString errorMessage;
 };
 
+struct CreateRecurringRuleResult {
+    bool ok = false;
+    QString id;
+    QString errorMessage;
+};
+
+struct ListRecurringRulesResult {
+    bool ok = false;
+    QVariantList rules;
+};
+
 struct TimeSeriesPoint {
     qint64 msecsSinceEpoch;
     double balance;
@@ -63,6 +74,9 @@ class FinchClient : public QObject {
     Q_PROPERTY(QVariantList transactions READ transactions NOTIFY transactionsChanged)
     Q_PROPERTY(bool transactionsLoading READ transactionsLoading NOTIFY transactionsLoadingChanged)
     Q_PROPERTY(bool recordTransactionInProgress READ recordTransactionInProgress NOTIFY recordTransactionInProgressChanged)
+    Q_PROPERTY(bool createRecurringRuleInProgress READ createRecurringRuleInProgress NOTIFY createRecurringRuleInProgressChanged)
+    Q_PROPERTY(QVariantList recurringRules READ recurringRules NOTIFY recurringRulesChanged)
+    Q_PROPERTY(bool recurringRulesLoading READ recurringRulesLoading NOTIFY recurringRulesLoadingChanged)
     Q_PROPERTY(bool timeSeriesLoading READ timeSeriesLoading NOTIFY timeSeriesLoadingChanged)
     Q_PROPERTY(bool timeSeriesEmpty READ timeSeriesEmpty NOTIFY timeSeriesDataChanged)
     Q_PROPERTY(QStringList timeSeriesAccountIds READ timeSeriesAccountIds NOTIFY timeSeriesDataChanged)
@@ -87,6 +101,9 @@ public:
     QVariantList transactions() const { return m_transactions; }
     bool transactionsLoading() const { return m_transactionsLoading; }
     bool recordTransactionInProgress() const { return m_recordTransactionInProgress; }
+    bool createRecurringRuleInProgress() const { return m_createRecurringRuleInProgress; }
+    QVariantList recurringRules() const { return m_recurringRules; }
+    bool recurringRulesLoading() const { return m_recurringRulesLoading; }
     bool timeSeriesLoading() const { return m_timeSeriesLoading; }
     bool timeSeriesEmpty() const;
     QStringList timeSeriesAccountIds() const;
@@ -102,6 +119,11 @@ public:
     Q_INVOKABLE void recordTransaction(const QString& accountId, const QString& date,
                                        qlonglong amount, const QString& name,
                                        const QString& description, int status);
+    Q_INVOKABLE void createRecurringRule(const QString& accountId, const QString& name,
+                                         qlonglong amount, int frequency,
+                                         const QString& startDate, const QString& endDate,
+                                         int dayOfMonth, const QVariantList& semiMonthlyDays);
+    Q_INVOKABLE void listRecurringRules(const QString& accountId);
     Q_INVOKABLE void fetchTimeSeries(const QString& fromDate, const QString& toDate,
                                      int interval, const QStringList& accountIds);
     Q_INVOKABLE void populateSeries(QObject* series, const QString& accountId);
@@ -120,6 +142,11 @@ signals:
     void recordTransactionInProgressChanged();
     void transactionRecorded(QString id);
     void transactionRecordFailed(QString message);
+    void createRecurringRuleInProgressChanged();
+    void recurringRuleCreated(QString id);
+    void recurringRuleCreateFailed(QString message);
+    void recurringRulesChanged();
+    void recurringRulesLoadingChanged();
     void timeSeriesLoadingChanged();
     void timeSeriesDataChanged();
 
@@ -130,6 +157,8 @@ private slots:
     void onCreateAccountFinished();
     void onListTransactionsFinished();
     void onRecordTransactionFinished();
+    void onCreateRecurringRuleFinished();
+    void onListRecurringRulesFinished();
     void onTimeSeriesFinished();
 
 private:
@@ -137,6 +166,10 @@ private:
     // in-flight account). The re-entrancy guard in listTransactions and the reconciliation in
     // onListTransactionsFinished both funnel through here.
     void startTransactionsFetch();
+    // Starts a recurring-rules fetch for m_requestedRecurringRulesAccountId. The re-entrancy
+    // guard in listRecurringRules and the reconciliation in onListRecurringRulesFinished funnel
+    // through here — the account-id-keyed twin of startTransactionsFetch.
+    void startRecurringRulesFetch();
 
     std::shared_ptr<grpc::Channel> m_channel;
     std::unique_ptr<finch::v1::FinchService::Stub> m_stub;
@@ -164,6 +197,15 @@ private:
     QFutureWatcher<ListTransactionsResult> m_transactionsWatcher;
     bool m_recordTransactionInProgress = false;
     QFutureWatcher<RecordTransactionResult> m_recordTransactionWatcher;
+    bool m_createRecurringRuleInProgress = false;
+    QFutureWatcher<CreateRecurringRuleResult> m_createRecurringRuleWatcher;
+    QVariantList m_recurringRules;
+    bool m_recurringRulesLoading = false;
+    // Account-id-keyed single-in-flight reconciliation, like the transactions path: the account
+    // the running fetch is for vs. the account most recently requested.
+    QString m_requestedRecurringRulesAccountId;
+    QString m_inFlightRecurringRulesAccountId;
+    QFutureWatcher<ListRecurringRulesResult> m_recurringRulesWatcher;
     bool m_timeSeriesLoading = false;
     QFutureWatcher<TimeSeriesResult> m_timeSeriesWatcher;
     TimeSeriesResult m_timeSeriesData;
