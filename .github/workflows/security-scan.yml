@@ -1,0 +1,117 @@
+name: Security Scan
+
+# Advisories get published whether or not anyone is pushing. The PR-time scan in
+# ci-go.yml only runs when Go files change, so without this a vulnerability could sit
+# undetected in the daemon — which runs as a user service against the finance database —
+# for as long as the repository stays quiet.
+#
+# This lives in its own file rather than as a job in ci-go.yml because that workflow's
+# `changes` gate uses dorny/paths-filter, which has no base ref to diff against on a
+# schedule event. It hosts no required status check, so unlike ci-go.yml it may safely
+# carry a paths filter.
+#
+# Note: GitHub disables scheduled triggers on public repos after 60 days without
+# repository activity — the very quiet stretch this exists to cover. The disable notice
+# arrives by email only.
+on:
+  schedule:
+    # Mondays, off the hour. Top-of-hour and midnight-UTC slots are the most contended
+    # on GitHub's shared scheduler and get delayed or dropped outright.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+  # So this workflow is exercised by the PR that changes it, rather than merging
+  # unvalidated and only being discovered broken at the next scheduled run.
+  pull_request:
+    paths:
+      - ".github/workflows/security-scan.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  # For the failure-reporting step only: GitHub's default signal for a failed scheduled
+  # run is an email to the last committer of this file, which is too easy to miss.
+  issues: write
+
+env:
+  GO_VERSION: "1.26.5"
+  GOVULNCHECK_VERSION: "1.6.0"
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            core/go.sum
+            daemon/go.sum
+            mcp/go.sum
+
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+
+      - name: Install protoc plugins
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
+
+      # daemon and mcp import daemon/gen, which is generated and not committed, so the
+      # scan cannot load their packages without this.
+      - name: Generate protobuf code
+        run: buf generate
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v${{ env.GOVULNCHECK_VERSION }}
+
+      # Every module is scanned even after one fails, so a single run reports the whole
+      # picture rather than only the first bad module. Output is captured to a file
+      # without a pipeline, so the result does not depend on whether pipefail is set.
+      - name: Scan for vulnerabilities
+        run: |
+          failed=0
+          for module in core daemon mcp; do
+            echo "::group::$module"
+            if ! (cd "$module" && govulncheck ./...) >module.log 2>&1; then
+              failed=1
+            fi
+            cat module.log
+            cat module.log >>scan.log
+            echo "::endgroup::"
+          done
+          exit "$failed"
+
+      # Reported as an issue rather than left to email: an issue is durable, shows up in
+      # the backlog, and survives a run that silently stops producing output. Uses the gh
+      # CLI (preinstalled on runners) rather than a marketplace action — pulling a
+      # third-party action into the supply-chain-hardening workflow would undercut it.
+      - name: Report failure as an issue
+        if: failure() && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "Scheduled vulnerability scan is failing"
+        run: |
+          existing=$(gh issue list --state open --search "$TITLE in:title" \
+            --json number --jq '.[0].number')
+          # --body-file - keeps scan output off the command line, so backticks and $ in
+          # advisory text cannot break shell quoting.
+          {
+            echo "\`govulncheck\` failed on \`${{ github.sha }}\`."
+            echo
+            echo "[Run log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            echo
+            echo '```'
+            tail -c 40000 scan.log || echo "(no scan output captured)"
+            echo '```'
+          } > body.md
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "$TITLE" --label security --body-file body.md
+          fi

@@ -1,8 +1,16 @@
 [tools]
-go = "1.25"
+# Exact patch pin, not "1.26". A fuzzy version resolves once at install time and then
+# sticks, so stdlib security fixes are never picked up — and govulncheck fails the build
+# on stdlib advisories, which makes this a security-relevant pin with an end-of-life
+# clock rather than a compatibility floor. Keep within one minor of current Go, and keep
+# it identical to the go-version in the CI workflows (asserted there).
+go = "1.26.5"
 just = "1.57.0"
 buf = "1.66.1"
 "go:google.golang.org/protobuf/cmd/protoc-gen-go" = "1.36.11"
 "go:google.golang.org/grpc/cmd/protoc-gen-go-grpc" = "1.6.1"
-"go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = "2.11.3"
+# Coupled to the go pin above: a linter built against an older Go than the code it
+# analyzes degrades to unreliable analysis. Bump both together.
+"go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = "2.12.2"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.6.0"
 lefthook = "2.1.4"

@@ -8,6 +8,7 @@ just all      # Build everything
 just test     # Run all tests
 just lint     # Run linters
 just proto    # Regenerate protobuf code
+just vuln     # Scan Go modules for known vulnerabilities (needs `just proto` first)
 ```
 
 ## Architecture
@@ -40,6 +41,8 @@ just test-mcp     # MCP server only
 ## Go Module Dependencies
 
 The daemon and mcp modules depend on core via `replace` directives pointing to `../core`. Because they resolve core's full dependency graph through those directives, a dependency change that shifts core's transitive versions (e.g. a Dependabot bump) leaves their `go.sum` stale. Run `just tidy` to reconcile all three modules after any such change.
+
+CI verifies this rather than trusting it: `test-and-lint` runs `go mod tidy -diff` per module, so a missed reconciliation fails the build instead of sitting latent.
 
 ## CI Notes
 
