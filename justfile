@@ -53,6 +53,21 @@ lint-daemon:
 lint-mcp:
     cd mcp && golangci-lint run ./...
 
+# Scan all Go modules for known vulnerabilities.
+# Needs generated proto code — run `just proto` first, or the daemon and MCP scans
+# fail to load packages (both import the gitignored daemon/gen).
+# Reports only advisories reachable from finch's own code; CI enforces the same check.
+vuln: vuln-core vuln-daemon vuln-mcp
+
+vuln-core:
+    cd core && govulncheck ./...
+
+vuln-daemon:
+    cd daemon && govulncheck ./...
+
+vuln-mcp:
+    cd mcp && govulncheck ./...
+
 # Format all Go code
 fmt:
     cd core && go fmt ./...

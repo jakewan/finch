@@ -20,6 +20,16 @@ permissions:
   contents: read
   pull-requests: read
 
+# Single place to bump these within this workflow. They must stay identical to the pins
+# in mise.toml — the "Verify toolchain pins match mise.toml" step below enforces it.
+env:
+  GO_VERSION: "1.26.5"
+  GOLANGCI_LINT_VERSION: "2.12.2"
+  GOVULNCHECK_VERSION: "1.6.0"
+  BUF_VERSION: "1.66.1"
+  PROTOC_GEN_GO_VERSION: "1.36.11"
+  PROTOC_GEN_GO_GRPC_VERSION: "1.6.1"
+
 jobs:
   # Gate job: detect whether Go- or proto-relevant files changed. This runs on
   # every PR (so the required checks below are never workflow-skipped, which
@@ -47,6 +57,11 @@ jobs:
               - 'buf.gen.yaml'
               - '.golangci.yml'
               - '.github/workflows/ci-go.yml'
+              # The security scan reuses this job's toolchain setup, and mise.toml holds
+              # the pins this job asserts against — a change to either must be verified
+              # by the gate it feeds, not skipped for touching no Go source.
+              - '.github/workflows/security-scan.yml'
+              - 'mise.toml'
             proto:
               - 'proto/**'
               - 'buf.yaml'
@@ -61,37 +76,82 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: |
             core/go.sum
             daemon/go.sum
             mcp/go.sum
 
+      # These versions are pinned both here and in mise.toml, so local and CI can drift
+      # apart silently — and the local `just vuln` check is only trustworthy if they
+      # agree. Assert it early, before the expensive steps, and annotate the PR on
+      # failure. Collapsing the duplication itself is tracked separately.
+      - name: Verify toolchain pins match mise.toml
+        run: |
+          fail=0
+          check() {
+            if [ "$2" != "$3" ]; then
+              echo "::error file=mise.toml::mise.toml pins $1 $2 but CI uses $3"
+              fail=1
+            fi
+          }
+          # Compare against the toolchain actually installed, not the requested string,
+          # so a fuzzy or mis-resolved go-version is caught rather than assumed.
+          check go \
+            "$(grep -oP '^go = "\K[^"]+' mise.toml)" \
+            "$(go env GOVERSION | sed 's/^go//')"
+          check golangci-lint \
+            "$(grep -oP 'golangci-lint" = "\K[^"]+' mise.toml)" \
+            "$GOLANGCI_LINT_VERSION"
+          check govulncheck \
+            "$(grep -oP 'govulncheck" = "\K[^"]+' mise.toml)" \
+            "$GOVULNCHECK_VERSION"
+          check buf \
+            "$(grep -oP '^buf = "\K[^"]+' mise.toml)" \
+            "$BUF_VERSION"
+          check protoc-gen-go \
+            "$(grep -oP 'protoc-gen-go" = "\K[^"]+' mise.toml)" \
+            "$PROTOC_GEN_GO_VERSION"
+          check protoc-gen-go-grpc \
+            "$(grep -oP 'protoc-gen-go-grpc" = "\K[^"]+' mise.toml)" \
+            "$PROTOC_GEN_GO_GRPC_VERSION"
+          exit $fail
+
       - uses: bufbuild/buf-action@v1
         with:
+          version: ${{ env.BUF_VERSION }}
           setup_only: true
 
       - name: Install protoc plugins
         run: |
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v${{ env.PROTOC_GEN_GO_VERSION }}
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v${{ env.PROTOC_GEN_GO_GRPC_VERSION }}
 
       - name: Generate protobuf code
         run: buf generate
 
+      # Enforces the go.sum reconciliation CLAUDE.md documents as a manual `just tidy`
+      # step. Must run after buf generate: without daemon/gen, tidy prunes the gRPC and
+      # protobuf requirements and reports a spurious diff. Cheap, so it fails fast.
+      - name: Verify go.mod/go.sum are tidy
+        run: |
+          go -C core mod tidy -diff
+          go -C daemon mod tidy -diff
+          go -C mcp mod tidy -diff
+
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.11.3
+          version: v${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: core
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.11.3
+          version: v${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: daemon
 
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.11.3
+          version: v${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: mcp
 
       - name: Test core
@@ -103,6 +163,22 @@ jobs:
       - name: Test MCP server
         run: cd mcp && go test ./...
 
+      # Last: the slowest step, so faster signals report first. This is a required
+      # check, so a reachable advisory blocks the merge. If one lands with no fix
+      # available, the default-branch ruleset's bypass actor is the documented escape —
+      # see .claude/rules/ci.md.
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v${{ env.GOVULNCHECK_VERSION }}
+
+      - name: Scan core for vulnerabilities
+        run: cd core && govulncheck ./...
+
+      - name: Scan daemon for vulnerabilities
+        run: cd daemon && govulncheck ./...
+
+      - name: Scan MCP server for vulnerabilities
+        run: cd mcp && govulncheck ./...
+
   proto-check:
     needs: changes
     if: ${{ needs.changes.outputs.proto == 'true' }}
@@ -112,6 +188,7 @@ jobs:
 
       - uses: bufbuild/buf-action@v1
         with:
+          version: ${{ env.BUF_VERSION }}
           lint: true
           breaking: false
           pr_comment: false
