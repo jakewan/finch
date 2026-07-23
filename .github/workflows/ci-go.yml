@@ -26,6 +26,7 @@ env:
   GO_VERSION: "1.26.5"
   GOLANGCI_LINT_VERSION: "2.12.2"
   GOVULNCHECK_VERSION: "1.6.0"
+  BUF_VERSION: "1.66.1"
 
 jobs:
   # Gate job: detect whether Go- or proto-relevant files changed. This runs on
@@ -103,10 +104,14 @@ jobs:
           check govulncheck \
             "$(grep -oP 'govulncheck" = "\K[^"]+' mise.toml)" \
             "$GOVULNCHECK_VERSION"
+          check buf \
+            "$(grep -oP '^buf = "\K[^"]+' mise.toml)" \
+            "$BUF_VERSION"
           exit $fail
 
       - uses: bufbuild/buf-action@v1
         with:
+          version: ${{ env.BUF_VERSION }}
           setup_only: true
 
       - name: Install protoc plugins
@@ -175,6 +180,7 @@ jobs:
 
       - uses: bufbuild/buf-action@v1
         with:
+          version: ${{ env.BUF_VERSION }}
           lint: true
           breaking: false
           pr_comment: false
