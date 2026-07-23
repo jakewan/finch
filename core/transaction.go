@@ -26,9 +26,9 @@ type TransactionStatus int
 
 const (
 	TransactionStatusUnspecified TransactionStatus = 0
-	TransactionStatusProjected  TransactionStatus = 1
-	TransactionStatusScheduled  TransactionStatus = 2
-	TransactionStatusReconciled TransactionStatus = 3
+	TransactionStatusProjected   TransactionStatus = 1
+	TransactionStatusScheduled   TransactionStatus = 2
+	TransactionStatusReconciled  TransactionStatus = 3
 )
 
 func ValidTransactionStatus(s TransactionStatus) bool {
@@ -45,6 +45,13 @@ type Transaction struct {
 	Description     string
 	Status          TransactionStatus
 	RecurringRuleID string
+	// IsTransfer marks one leg of a transfer between two accounts. It has two
+	// provenance sources in the event log, and a replay must read both: rows written
+	// before this column existed are derivable from TransferCreated (which is what
+	// the migration backfills from), while later ones carry it on their own
+	// TransactionRecorded payload. Only CreateTransfer sets it — a leg entered by
+	// hand through RecordTransaction is an ordinary transaction by definition.
+	IsTransfer bool
 }
 
 // TransactionRecordedPayload is the event data for recording a transaction.
@@ -56,6 +63,7 @@ type TransactionRecordedPayload struct {
 	Description     string `json:"description,omitempty"`
 	Status          int    `json:"status"`
 	RecurringRuleID string `json:"recurring_rule_id,omitempty"`
+	IsTransfer      bool   `json:"is_transfer,omitempty"`
 }
 
 // TransactionStatusChangedPayload records a status transition.
@@ -246,6 +254,7 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 	// Source transaction (negative amount — money leaving).
 	sourcePayload, err := json.Marshal(TransactionRecordedPayload{
 		AccountID:       params.SourceAccountID,
+		IsTransfer:      true,
 		Date:            dateStr,
 		Amount:          -params.Amount,
 		Name:            params.Name,
@@ -253,6 +262,7 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 		RecurringRuleID: params.RecurringRuleID,
 	})
 	if err != nil {
+		_ = tx.Rollback()
 		return fmt.Errorf("marshal source payload: %w", err)
 	}
 	if _, err := appendEvents(ctx, tx, aggregateTypeTransaction, sourceID, []NewEvent{
@@ -265,6 +275,7 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 	// Destination transaction (positive amount — money arriving).
 	destPayload, err := json.Marshal(TransactionRecordedPayload{
 		AccountID:       params.DestinationAccountID,
+		IsTransfer:      true,
 		Date:            dateStr,
 		Amount:          params.Amount,
 		Name:            params.Name,
@@ -272,6 +283,7 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 		RecurringRuleID: params.RecurringRuleID,
 	})
 	if err != nil {
+		_ = tx.Rollback()
 		return fmt.Errorf("marshal dest payload: %w", err)
 	}
 	if _, err := appendEvents(ctx, tx, aggregateTypeTransaction, destID, []NewEvent{
@@ -292,6 +304,7 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 		DestTransactionID:    destID,
 	})
 	if err != nil {
+		_ = tx.Rollback()
 		return fmt.Errorf("marshal transfer payload: %w", err)
 	}
 	// Record the transfer event on the source transaction aggregate for traceability.
@@ -309,8 +322,8 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO transactions (id, account_id, date, amount, name, description, status, recurring_rule_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO transactions (id, account_id, date, amount, name, description, status, recurring_rule_id, is_transfer)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
 		sourceID, params.SourceAccountID, dateStr, -params.Amount,
 		params.Name, nilIfEmpty(params.Description), int(params.Status), recurringRuleID,
 	); err != nil {
@@ -319,8 +332,8 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO transactions (id, account_id, date, amount, name, description, status, recurring_rule_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO transactions (id, account_id, date, amount, name, description, status, recurring_rule_id, is_transfer)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
 		destID, params.DestinationAccountID, dateStr, params.Amount,
 		params.Name, nilIfEmpty(params.Description), int(params.Status), recurringRuleID,
 	); err != nil {
@@ -334,7 +347,7 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 // ListTransactions returns transactions for an account, ordered by date.
 func (db *DB) ListTransactions(ctx context.Context, accountID string) ([]Transaction, error) {
 	rows, err := db.conn.QueryContext(ctx,
-		`SELECT id, account_id, date, amount, name, description, status, recurring_rule_id
+		`SELECT id, account_id, date, amount, name, description, status, recurring_rule_id, is_transfer
 		 FROM transactions WHERE account_id = ? ORDER BY date, name`, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("query transactions: %w", err)
@@ -350,10 +363,12 @@ func scanTransactions(rows *sql.Rows) ([]Transaction, error) {
 		var dateStr string
 		var description sql.NullString
 		var recurringRuleID sql.NullString
+		var isTransfer int
 		if err := rows.Scan(&t.ID, &t.AccountID, &dateStr, &t.Amount, &t.Name,
-			&description, &t.Status, &recurringRuleID); err != nil {
+			&description, &t.Status, &recurringRuleID, &isTransfer); err != nil {
 			return nil, fmt.Errorf("scan transaction: %w", err)
 		}
+		t.IsTransfer = isTransfer != 0
 		d, err := time.Parse(time.DateOnly, dateStr)
 		if err != nil {
 			return nil, fmt.Errorf("parse date: %w", err)

@@ -17,6 +17,33 @@ type ProjectedTransaction struct {
 	RecurringRuleID string
 	Status          TransactionStatus
 	IsProjected     bool // true if generated from a recurring rule, false if from a recorded transaction
+	IsTransfer      bool // true if this entry is one leg of a transfer between two accounts
+}
+
+// ruleEffect is how a recurring rule moves money on one particular account.
+type ruleEffect struct {
+	Amount     int64
+	IsTransfer bool
+}
+
+// effectOn resolves a rule's effect on the given account. A transfer rule's stored
+// amount is a positive magnitude, matching CreateTransfer — direction comes from
+// which side of the transfer the account sits on, so the source is debited and the
+// target credited. A non-transfer rule applies its stored, signed amount as-is.
+//
+// Both the sign and the transfer classification come from here so the two cannot
+// drift apart: cash flow keys off IsTransfer to exclude transfer legs from income
+// and expenses, and that decision must track the sign decision exactly.
+func effectOn(rule RecurringRule, accountID string) ruleEffect {
+	if rule.IsTransfer && rule.TransferTargetAccountID != "" {
+		switch accountID {
+		case rule.AccountID:
+			return ruleEffect{Amount: -rule.Amount, IsTransfer: true}
+		case rule.TransferTargetAccountID:
+			return ruleEffect{Amount: rule.Amount, IsTransfer: true}
+		}
+	}
+	return ruleEffect{Amount: rule.Amount}
 }
 
 // DailyBalance represents the projected balance for one account on one day.
@@ -37,10 +64,10 @@ type ProjectionComparison struct {
 
 // AccountDelta shows the balance difference for one account between two projections.
 type AccountDelta struct {
-	AccountID       string
-	BalanceAsOf1    int64
-	BalanceAsOf2    int64
-	Delta           int64
+	AccountID    string
+	BalanceAsOf1 int64
+	BalanceAsOf2 int64
+	Delta        int64
 }
 
 // ProjectBalances computes daily balances for the given date range by merging
@@ -109,10 +136,18 @@ func (db *DB) ProjectBalanceOnDate(ctx context.Context, targetDate time.Time, ac
 
 func (db *DB) projectAccountBalances(ctx context.Context, accountID string, from, to time.Time) ([]DailyBalance, error) {
 	// Load recurring rules (needed for both starting balance and range projection).
+	// Rules owned by this account cover its own entries and the debit leg of any
+	// transfer out; inbound transfer rules are owned by the *other* account, so they
+	// have to be loaded separately or the credit leg never reaches this projection.
 	rules, err := db.ListRecurringRules(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("list recurring rules: %w", err)
 	}
+	inbound, err := db.listInboundTransferRules(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("list inbound transfer rules: %w", err)
+	}
+	rules = append(rules, inbound...)
 
 	// Starting balance = recorded transactions before `from` + recurring rule
 	// expansions before `from` (excluding dates that have recorded transactions
@@ -140,12 +175,13 @@ func (db *DB) projectAccountBalances(ctx context.Context, accountID string, from
 			rule.Frequency, rule.StartDate, rule.StartDate, beforeFrom,
 			rule.DayOfMonth, rule.SemiMonthlyDays, rule.EndDate,
 		)
+		effect := effectOn(rule, accountID)
 		for _, occ := range priorOccurrences {
 			dateKey := occ.Format(time.DateOnly)
 			if priorRecorded[dateKey] != nil && priorRecorded[dateKey][rule.ID] {
 				continue
 			}
-			startingBalance += rule.Amount
+			startingBalance += effect.Amount
 		}
 	}
 
@@ -167,6 +203,7 @@ func (db *DB) projectAccountBalances(ctx context.Context, accountID string, from
 			RecurringRuleID: t.RecurringRuleID,
 			Status:          t.Status,
 			IsProjected:     false,
+			IsTransfer:      t.IsTransfer,
 		})
 		if t.RecurringRuleID != "" {
 			dateKey := t.Date.Format(time.DateOnly)
@@ -186,19 +223,25 @@ func (db *DB) projectAccountBalances(ctx context.Context, accountID string, from
 			rule.Frequency, rule.StartDate, from, to,
 			rule.DayOfMonth, rule.SemiMonthlyDays, rule.EndDate,
 		)
+		effect := effectOn(rule, accountID)
 		for _, occ := range occurrences {
 			dateKey := occ.Format(time.DateOnly)
+			// Dedup stays scoped to this account: a recorded entry replaces the
+			// projection only on the side that actually recorded it. Scoping it to
+			// the rule instead would suppress the credit leg whenever only the debit
+			// leg was materialized, destroying the money the debit moved.
 			if recordedDates[dateKey] != nil && recordedDates[dateKey][rule.ID] {
 				continue
 			}
 			entries = append(entries, ProjectedTransaction{
 				Date:            occ,
-				Amount:          rule.Amount,
+				Amount:          effect.Amount,
 				Name:            rule.Name,
 				AccountID:       accountID,
 				RecurringRuleID: rule.ID,
 				Status:          TransactionStatusProjected,
 				IsProjected:     true,
+				IsTransfer:      effect.IsTransfer,
 			})
 		}
 	}
@@ -238,6 +281,22 @@ func (db *DB) projectAccountBalances(ctx context.Context, accountID string, from
 	return result, nil
 }
 
+// listInboundTransferRules returns transfer rules owned by another account that
+// credit this one. ListRecurringRules filters on account_id, so without this the
+// destination side of a recurring transfer is invisible to its own projection.
+func (db *DB) listInboundTransferRules(ctx context.Context, accountID string) ([]RecurringRule, error) {
+	rows, err := db.conn.QueryContext(ctx,
+		`SELECT `+recurringRuleColumns+`
+		 FROM recurring_rules
+		 WHERE is_transfer = 1 AND transfer_target_account_id = ? AND account_id != ?
+		 ORDER BY name`, accountID, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("query inbound transfer rules: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanRecurringRules(rows)
+}
+
 // earliestDateForAccount finds the earliest date relevant for projection:
 // the minimum of the earliest transaction date and earliest recurring rule start date.
 func (db *DB) earliestDateForAccount(ctx context.Context, accountID string) (*time.Time, error) {
@@ -257,9 +316,15 @@ func (db *DB) earliestDateForAccount(ctx context.Context, accountID string) (*ti
 		earliest = &t
 	}
 
+	// Consider rules that *target* this account as well as ones it owns. A savings
+	// account whose only activity is an inbound transfer has no rows of its own, and
+	// an account-scoped lookup would report no relevant date and flatline it at zero.
 	var ruleDate sql.NullString
 	row = db.conn.QueryRowContext(ctx,
-		"SELECT MIN(start_date) FROM recurring_rules WHERE account_id = ? AND paused = 0", accountID)
+		`SELECT MIN(start_date) FROM recurring_rules
+		 WHERE paused = 0
+		   AND (account_id = ? OR (is_transfer = 1 AND transfer_target_account_id = ?))`,
+		accountID, accountID)
 	if err := row.Scan(&ruleDate); err != nil {
 		return nil, fmt.Errorf("earliest rule start date: %w", err)
 	}
@@ -321,7 +386,7 @@ func (db *DB) computeBalanceUpTo(ctx context.Context, accountID string, upTo tim
 // listTransactionsInRange returns transactions for an account within [from, to].
 func (db *DB) listTransactionsInRange(ctx context.Context, accountID string, from, to time.Time) ([]Transaction, error) {
 	rows, err := db.conn.QueryContext(ctx,
-		`SELECT id, account_id, date, amount, name, description, status, recurring_rule_id
+		`SELECT id, account_id, date, amount, name, description, status, recurring_rule_id, is_transfer
 		 FROM transactions
 		 WHERE account_id = ? AND date >= ? AND date <= ?
 		 ORDER BY date, name`,

@@ -64,6 +64,14 @@ type AccountTypeChangedPayload struct {
 // matches the current value.
 var ErrNoChange = errors.New("no change")
 
+// ErrInvalidInput indicates a caller supplied a value the domain rejects.
+// Wrap it so the API layer can map validation failures to InvalidArgument
+// via errors.Is rather than inspecting error strings.
+var ErrInvalidInput = errors.New("invalid input")
+
+// ErrNotFound indicates a referenced aggregate does not exist.
+var ErrNotFound = errors.New("not found")
+
 func ValidAccountType(t AccountType) bool {
 	return t >= AccountTypeChecking && t <= AccountTypeBrokerage
 }

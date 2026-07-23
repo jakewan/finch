@@ -299,31 +299,31 @@ func newUpdateAccountTypeHandler(client finchv1.FinchServiceClient) func(context
 // CreateRecurringRule
 
 type CreateRecurringRuleInput struct {
-	AccountID              string  `json:"account_id" jsonschema:"UUID of the account"`
-	Name                   string  `json:"name" jsonschema:"name of the recurring rule"`
-	Amount                 int64   `json:"amount" jsonschema:"amount in cents"`
-	Frequency              string  `json:"frequency" jsonschema:"WEEKLY, BIWEEKLY, SEMI_MONTHLY, MONTHLY, or YEARLY"`
-	StartDate              string  `json:"start_date" jsonschema:"ISO 8601 date (YYYY-MM-DD)"`
-	EndDate                string  `json:"end_date,omitempty" jsonschema:"optional end date (YYYY-MM-DD)"`
-	DayOfMonth             int32   `json:"day_of_month,omitempty" jsonschema:"day of month for monthly rules (1-31)"`
-	SemiMonthlyDays        []int32 `json:"semi_monthly_days,omitempty" jsonschema:"two days for semi-monthly rules"`
-	IsTransfer             bool    `json:"is_transfer,omitempty" jsonschema:"whether this rule represents a transfer"`
-	TransferTargetAccountID string `json:"transfer_target_account_id,omitempty" jsonschema:"UUID of the target account for transfers"`
+	AccountID               string  `json:"account_id" jsonschema:"UUID of the account"`
+	Name                    string  `json:"name" jsonschema:"name of the recurring rule"`
+	Amount                  int64   `json:"amount" jsonschema:"amount in cents; negative for an expense and positive for income. For a transfer rule (is_transfer true) it must instead be a positive magnitude — direction comes from the account and target pair, so the source is debited and the target credited"`
+	Frequency               string  `json:"frequency" jsonschema:"WEEKLY, BIWEEKLY, SEMI_MONTHLY, MONTHLY, or YEARLY"`
+	StartDate               string  `json:"start_date" jsonschema:"ISO 8601 date (YYYY-MM-DD)"`
+	EndDate                 string  `json:"end_date,omitempty" jsonschema:"optional end date (YYYY-MM-DD)"`
+	DayOfMonth              int32   `json:"day_of_month,omitempty" jsonschema:"day of month for monthly rules (1-31)"`
+	SemiMonthlyDays         []int32 `json:"semi_monthly_days,omitempty" jsonschema:"two days for semi-monthly rules"`
+	IsTransfer              bool    `json:"is_transfer,omitempty" jsonschema:"whether this rule moves money between two accounts rather than in or out of one"`
+	TransferTargetAccountID string  `json:"transfer_target_account_id,omitempty" jsonschema:"UUID of the destination account; required when is_transfer is true and must differ from account_id"`
 }
 
 type RecurringRuleInfo struct {
-	ID                     string  `json:"id"`
-	AccountID              string  `json:"account_id"`
-	Name                   string  `json:"name"`
-	Amount                 int64   `json:"amount"`
-	Frequency              string  `json:"frequency"`
-	StartDate              string  `json:"start_date"`
-	EndDate                string  `json:"end_date,omitempty"`
-	DayOfMonth             int32   `json:"day_of_month,omitempty"`
-	SemiMonthlyDays        []int32 `json:"semi_monthly_days,omitempty"`
-	IsTransfer             bool    `json:"is_transfer,omitempty"`
-	TransferTargetAccountID string `json:"transfer_target_account_id,omitempty"`
-	Paused                 bool    `json:"paused"`
+	ID                      string  `json:"id"`
+	AccountID               string  `json:"account_id"`
+	Name                    string  `json:"name"`
+	Amount                  int64   `json:"amount"`
+	Frequency               string  `json:"frequency"`
+	StartDate               string  `json:"start_date"`
+	EndDate                 string  `json:"end_date,omitempty"`
+	DayOfMonth              int32   `json:"day_of_month,omitempty"`
+	SemiMonthlyDays         []int32 `json:"semi_monthly_days,omitempty"`
+	IsTransfer              bool    `json:"is_transfer,omitempty"`
+	TransferTargetAccountID string  `json:"transfer_target_account_id,omitempty"`
+	Paused                  bool    `json:"paused"`
 }
 
 type CreateRecurringRuleOutput struct {
@@ -353,15 +353,15 @@ func newCreateRecurringRuleHandler(client finchv1.FinchServiceClient) func(conte
 		}
 
 		resp, err := client.CreateRecurringRule(ctx, &finchv1.CreateRecurringRuleRequest{
-			AccountId:              input.AccountID,
-			Name:                   input.Name,
-			Amount:                 input.Amount,
-			Frequency:              freq,
-			StartDate:              input.StartDate,
-			EndDate:                input.EndDate,
-			DayOfMonth:             input.DayOfMonth,
-			SemiMonthlyDays:        input.SemiMonthlyDays,
-			IsTransfer:             input.IsTransfer,
+			AccountId:               input.AccountID,
+			Name:                    input.Name,
+			Amount:                  input.Amount,
+			Frequency:               freq,
+			StartDate:               input.StartDate,
+			EndDate:                 input.EndDate,
+			DayOfMonth:              input.DayOfMonth,
+			SemiMonthlyDays:         input.SemiMonthlyDays,
+			IsTransfer:              input.IsTransfer,
 			TransferTargetAccountId: input.TransferTargetAccountID,
 		})
 		if err != nil {
@@ -522,6 +522,7 @@ type TransactionInfo struct {
 	Description     string `json:"description,omitempty"`
 	Status          string `json:"status"`
 	RecurringRuleID string `json:"recurring_rule_id,omitempty"`
+	IsTransfer      bool   `json:"is_transfer,omitempty"`
 }
 
 type RecordTransactionOutput struct {
@@ -687,18 +688,18 @@ func protoEventsToInfo(events []*finchv1.AccountEvent) []AccountEventInfo {
 
 func protoRuleToInfo(r *finchv1.RecurringRule) RecurringRuleInfo {
 	return RecurringRuleInfo{
-		ID:                     r.Id,
-		AccountID:              r.AccountId,
-		Name:                   r.Name,
-		Amount:                 r.Amount,
-		Frequency:              r.Frequency.String(),
-		StartDate:              r.StartDate,
-		EndDate:                r.EndDate,
-		DayOfMonth:             r.DayOfMonth,
-		SemiMonthlyDays:        r.SemiMonthlyDays,
-		IsTransfer:             r.IsTransfer,
+		ID:                      r.Id,
+		AccountID:               r.AccountId,
+		Name:                    r.Name,
+		Amount:                  r.Amount,
+		Frequency:               r.Frequency.String(),
+		StartDate:               r.StartDate,
+		EndDate:                 r.EndDate,
+		DayOfMonth:              r.DayOfMonth,
+		SemiMonthlyDays:         r.SemiMonthlyDays,
+		IsTransfer:              r.IsTransfer,
 		TransferTargetAccountID: r.TransferTargetAccountId,
-		Paused:                 r.Paused,
+		Paused:                  r.Paused,
 	}
 }
 
@@ -718,6 +719,7 @@ type ProjectedTransactionInfo struct {
 	RecurringRuleID string `json:"recurring_rule_id,omitempty"`
 	Status          string `json:"status"`
 	IsProjected     bool   `json:"is_projected"`
+	IsTransfer      bool   `json:"is_transfer,omitempty"`
 }
 
 type DailyBalanceInfo struct {
@@ -753,6 +755,7 @@ func newProjectBalancesHandler(client finchv1.FinchServiceClient) func(context.C
 					RecurringRuleID: t.RecurringRuleId,
 					Status:          t.Status.String(),
 					IsProjected:     t.IsProjected,
+					IsTransfer:      t.IsTransfer,
 				}
 			}
 			balances[i] = DailyBalanceInfo{
@@ -798,10 +801,11 @@ type GetMonthlyCashFlowInput struct {
 }
 
 type MonthlyCashFlowInfo struct {
-	Month    string `json:"month"`
-	Income   int64  `json:"income"`
-	Expenses int64  `json:"expenses"`
-	Net      int64  `json:"net"`
+	Month     string `json:"month"`
+	Income    int64  `json:"income"`
+	Expenses  int64  `json:"expenses"`
+	Net       int64  `json:"net"`
+	Transfers int64  `json:"transfers"`
 }
 
 type GetMonthlyCashFlowOutput struct {
@@ -821,10 +825,11 @@ func newGetMonthlyCashFlowHandler(client finchv1.FinchServiceClient) func(contex
 		months := make([]MonthlyCashFlowInfo, len(resp.Months))
 		for i, m := range resp.Months {
 			months[i] = MonthlyCashFlowInfo{
-				Month:    m.Month,
-				Income:   m.Income,
-				Expenses: m.Expenses,
-				Net:      m.Net,
+				Month:     m.Month,
+				Income:    m.Income,
+				Expenses:  m.Expenses,
+				Net:       m.Net,
+				Transfers: m.Transfers,
 			}
 		}
 		return nil, GetMonthlyCashFlowOutput{Months: months}, nil
@@ -911,5 +916,6 @@ func protoTxnToInfo(t *finchv1.Transaction) TransactionInfo {
 		Description:     t.Description,
 		Status:          t.Status.String(),
 		RecurringRuleID: t.RecurringRuleId,
+		IsTransfer:      t.IsTransfer,
 	}
 }

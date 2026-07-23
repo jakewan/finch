@@ -203,6 +203,9 @@ message Transaction {
   string description = 6;
   TransactionStatus status = 7;
   string recurring_rule_id = 8;
+  // True when this row is one leg of a transfer between two of the user's own
+  // accounts. Such legs are excluded from cash-flow income and expenses.
+  bool is_transfer = 9;
 }
 
 message RecordTransactionRequest {
@@ -257,6 +260,9 @@ message ProjectedTransaction {
   string recurring_rule_id = 5;
   TransactionStatus status = 6;
   bool is_projected = 7;
+  // True when this entry is one leg of a transfer between two of the user's own
+  // accounts. Such legs are excluded from cash-flow income and expenses.
+  bool is_transfer = 8;
 }
 
 message DailyBalance {
@@ -305,6 +311,10 @@ message MonthlyCashFlow {
   int64 income = 2;
   int64 expenses = 3;
   int64 net = 4;
+  // Net movement between the user's own accounts, excluded from income and
+  // expenses. Reported separately so income + expenses + transfers reconciles
+  // against the period's balance change.
+  int64 transfers = 5;
 }
 
 message GetMonthlyCashFlowResponse {

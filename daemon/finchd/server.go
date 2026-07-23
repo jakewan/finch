@@ -137,6 +137,22 @@ func (s *Server) CreateRecurringRule(ctx context.Context, req *finchv1.CreateRec
 		}
 	}
 
+	// Transfer fields, checked syntactically here so a malformed request never
+	// reaches core. Core re-validates and additionally verifies the target account
+	// exists — that check needs a database read, which belongs in core, so it maps
+	// back through ruleError rather than being duplicated at this boundary.
+	if req.IsTransfer {
+		if strings.TrimSpace(req.TransferTargetAccountId) == "" {
+			return nil, status.Error(codes.InvalidArgument, "transfer_target_account_id must not be empty for a transfer rule")
+		}
+		if req.TransferTargetAccountId == req.AccountId {
+			return nil, status.Error(codes.InvalidArgument, "transfer_target_account_id must differ from account_id")
+		}
+		if req.Amount <= 0 {
+			return nil, status.Errorf(codes.InvalidArgument, "transfer rule amount must be positive, got %d", req.Amount)
+		}
+	}
+
 	startDate, err := time.Parse(time.DateOnly, req.StartDate)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid start_date: %v", err)
@@ -167,7 +183,7 @@ func (s *Server) CreateRecurringRule(ctx context.Context, req *finchv1.CreateRec
 
 	rule, err := s.db.CreateRecurringRule(ctx, params)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "create recurring rule: %v", err)
+		return nil, ruleError("create recurring rule", err)
 	}
 
 	return &finchv1.CreateRecurringRuleResponse{
@@ -367,6 +383,7 @@ func (s *Server) ProjectBalances(ctx context.Context, req *finchv1.ProjectBalanc
 				Name:            t.Name,
 				AccountId:       t.AccountID,
 				RecurringRuleId: t.RecurringRuleID,
+				IsTransfer:      t.IsTransfer,
 				Status:          finchv1.TransactionStatus(t.Status),
 				IsProjected:     t.IsProjected,
 			})
@@ -409,10 +426,11 @@ func (s *Server) GetMonthlyCashFlow(ctx context.Context, req *finchv1.GetMonthly
 	resp := &finchv1.GetMonthlyCashFlowResponse{}
 	for _, m := range months {
 		resp.Months = append(resp.Months, &finchv1.MonthlyCashFlow{
-			Month:    m.Month,
-			Income:   m.Income,
-			Expenses: m.Expenses,
-			Net:      m.Net,
+			Month:     m.Month,
+			Income:    m.Income,
+			Expenses:  m.Expenses,
+			Net:       m.Net,
+			Transfers: m.Transfers,
 		})
 	}
 	return resp, nil
@@ -468,9 +486,19 @@ func accountError(op string, err error) error {
 	return status.Errorf(codes.Internal, "%s: %v", op, err)
 }
 
-// ruleError maps core recurring rule errors to gRPC status codes.
+// ruleError maps core recurring rule errors to gRPC status codes. Typed errors are
+// checked first; the string match is a legacy fallback for paths in core that do not
+// yet wrap a sentinel.
+//
+// The ordering is load-bearing, not incidental: an unknown transfer target is
+// InvalidArgument (a bad field value in the request, not a missing rule aggregate),
+// and its message contains the words "not found" — so the string fallback would
+// misclassify it as NotFound if it ran first.
 func ruleError(op string, err error) error {
-	if strings.Contains(err.Error(), "not found") {
+	if errors.Is(err, core.ErrInvalidInput) {
+		return status.Errorf(codes.InvalidArgument, "%s: %v", op, err)
+	}
+	if errors.Is(err, core.ErrNotFound) || strings.Contains(err.Error(), "not found") {
 		return status.Errorf(codes.NotFound, "%s: %v", op, err)
 	}
 	return status.Errorf(codes.Internal, "%s: %v", op, err)
@@ -524,5 +552,6 @@ func transactionToProto(t *core.Transaction) *finchv1.Transaction {
 		Description:     t.Description,
 		Status:          finchv1.TransactionStatus(t.Status),
 		RecurringRuleId: t.RecurringRuleID,
+		IsTransfer:      t.IsTransfer,
 	}
 }

@@ -306,6 +306,30 @@ func TestCreateRecurringRuleValidationReturnsInvalidArgument(t *testing.T) {
 				Frequency: finchv1.Frequency(99), StartDate: "2025-01-01",
 			},
 		},
+		{
+			name: "transfer without a target account",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "To Savings", Amount: 100000,
+				Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+				DayOfMonth: 1, IsTransfer: true,
+			},
+		},
+		{
+			name: "transfer targeting its own account",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "To Savings", Amount: 100000,
+				Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+				DayOfMonth: 1, IsTransfer: true, TransferTargetAccountId: accountID,
+			},
+		},
+		{
+			name: "transfer with a negative amount",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "To Savings", Amount: -100000,
+				Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+				DayOfMonth: 1, IsTransfer: true, TransferTargetAccountId: "some-other-account",
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -314,6 +338,86 @@ func TestCreateRecurringRuleValidationReturnsInvalidArgument(t *testing.T) {
 				t.Fatalf("expected InvalidArgument, got %v (err: %v)", status.Code(err), err)
 			}
 		})
+	}
+}
+
+// A transfer rule naming an account that does not exist is the case the boundary
+// cannot check syntactically: confirming the target requires a database read, which
+// belongs in core. It must still reach the caller as a typed status rather than
+// falling through to Internal.
+func TestCreateRecurringRuleUnknownTransferTargetIsNotInternal(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+	accountID := createRulesAccount(t, client, ctx)
+
+	_, err := client.CreateRecurringRule(ctx, &finchv1.CreateRecurringRuleRequest{
+		AccountId: accountID, Name: "To Savings", Amount: 100000,
+		Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+		DayOfMonth: 1, IsTransfer: true,
+		TransferTargetAccountId: "00000000-0000-0000-0000-000000000000",
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v (err: %v)", status.Code(err), err)
+	}
+}
+
+// Editing a transfer rule's amount is the second write path, and it must be gated at
+// the boundary exactly as creation is — otherwise the invariant holds only until
+// someone edits the rule.
+func TestUpdateRecurringRuleAmountTransferRejectsNonPositive(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+	sourceID := createRulesAccount(t, client, ctx)
+
+	target, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
+		Name: "Savings", Type: finchv1.AccountType_ACCOUNT_TYPE_SAVINGS,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+	rule, err := client.CreateRecurringRule(ctx, &finchv1.CreateRecurringRuleRequest{
+		AccountId: sourceID, Name: "To Savings", Amount: 100000,
+		Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+		DayOfMonth: 1, IsTransfer: true, TransferTargetAccountId: target.Account.Id,
+	})
+	if err != nil {
+		t.Fatalf("CreateRecurringRule: %v", err)
+	}
+
+	for _, amount := range []int64{0, -100000} {
+		_, err := client.UpdateRecurringRuleAmount(ctx, &finchv1.UpdateRecurringRuleAmountRequest{
+			RuleId: rule.Rule.Id, NewAmount: amount, EffectiveDate: "2025-02-01",
+		})
+		if status.Code(err) != codes.InvalidArgument {
+			t.Errorf("amount %d: expected InvalidArgument, got %v (err: %v)", amount, status.Code(err), err)
+		}
+	}
+}
+
+// A valid transfer rule must still be accepted — the counterpart to the rejection
+// cases above, guarding against over-gating the new transfer validation.
+func TestCreateRecurringRuleTransferValid(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+	sourceID := createRulesAccount(t, client, ctx)
+
+	target, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
+		Name: "Savings", Type: finchv1.AccountType_ACCOUNT_TYPE_SAVINGS,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	rule, err := client.CreateRecurringRule(ctx, &finchv1.CreateRecurringRuleRequest{
+		AccountId: sourceID, Name: "To Savings", Amount: 100000,
+		Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+		DayOfMonth: 1, IsTransfer: true, TransferTargetAccountId: target.Account.Id,
+	})
+	if err != nil {
+		t.Fatalf("CreateRecurringRule: %v", err)
+	}
+	if !rule.Rule.IsTransfer || rule.Rule.TransferTargetAccountId != target.Account.Id {
+		t.Fatalf("transfer fields not round-tripped: %+v", rule.Rule)
 	}
 }
 
