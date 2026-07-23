@@ -54,6 +54,30 @@ jobs:
             daemon/go.sum
             mcp/go.sum
 
+      # This workflow pins its own copy of the toolchain versions, so it can drift from
+      # mise.toml independently of ci-go.yml's assertion. Without this check a forgotten
+      # bump here would scan on a stale Go and open a false failure issue every week.
+      # (The duplication itself is tracked for removal in the follow-up issue.)
+      - name: Verify toolchain pins match mise.toml
+        run: |
+          fail=0
+          check() {
+            if [ "$2" != "$3" ]; then
+              echo "::error file=mise.toml::mise.toml pins $1 $2 but this workflow uses $3"
+              fail=1
+            fi
+          }
+          check go \
+            "$(grep -oP '^go = "\K[^"]+' mise.toml)" \
+            "$(go env GOVERSION | sed 's/^go//')"
+          check govulncheck \
+            "$(grep -oP 'govulncheck" = "\K[^"]+' mise.toml)" \
+            "$GOVULNCHECK_VERSION"
+          check buf \
+            "$(grep -oP '^buf = "\K[^"]+' mise.toml)" \
+            "$BUF_VERSION"
+          exit $fail
+
       - uses: bufbuild/buf-action@v1
         with:
           version: ${{ env.BUF_VERSION }}
