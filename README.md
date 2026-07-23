@@ -98,7 +98,7 @@ just install-service  # the MCP server exits at startup if it can't reach the da
 just install-mcp
 ```
 
-Running the daemon means Linux with systemd user services. The daemon and MCP server both carry macOS socket paths, but there is no supported way to start the daemon there yet.
+Running the daemon *as a service* means Linux with systemd. The daemon and MCP server also carry macOS paths — the socket lives at `/tmp/finch-$UID/finch.sock` there — so the [manual path](#manual) can start the daemon on macOS, though it isn't tested and the troubleshooting below assumes systemd.
 
 **Claude Code:**
 
