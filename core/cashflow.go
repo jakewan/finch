@@ -10,9 +10,14 @@ import (
 // MonthlyCashFlow summarizes income, expenses, and net for a single month.
 type MonthlyCashFlow struct {
 	Month    string // "2025-01"
-	Income   int64  // sum of positive transaction amounts (cents)
-	Expenses int64  // sum of negative transaction amounts (cents, stored as negative)
+	Income   int64  // sum of positive non-transfer amounts (cents)
+	Expenses int64  // sum of negative non-transfer amounts (cents, stored as negative)
 	Net      int64  // income + expenses
+	// Transfers is the net movement between the user's own accounts, kept out of
+	// Income and Expenses because a transfer is neither. It is reported rather than
+	// discarded so Income + Expenses + Transfers equals the period's balance change,
+	// which is what lets a statement be reconciled against the balance chart.
+	Transfers int64
 }
 
 // GetMonthlyCashFlow aggregates income and expenses per month over a date range.
@@ -44,6 +49,16 @@ func (db *DB) GetMonthlyCashFlow(ctx context.Context, fromMonth, toMonth string,
 			if !ok {
 				cf = &MonthlyCashFlow{Month: month}
 				monthData[month] = cf
+			}
+			// A transfer moves money between the user's own accounts, so it is
+			// neither income nor an expense. Counting both legs would inflate gross
+			// income by the user's own savings rate. It is tracked separately rather
+			// than dropped, so the report still reconciles against the balance. This
+			// applies equally to a projected leg and a recorded one, so the same
+			// transfer does not change classification once it is materialized.
+			if txn.IsTransfer {
+				cf.Transfers += txn.Amount
+				continue
 			}
 			if txn.Amount > 0 {
 				cf.Income += txn.Amount

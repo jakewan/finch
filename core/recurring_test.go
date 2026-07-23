@@ -24,11 +24,11 @@ func TestCreateAndListRecurringRules(t *testing.T) {
 	acct := createTestAccount(t, db)
 
 	rule, err := db.CreateRecurringRule(ctx, core.CreateRecurringRuleParams{
-		AccountID: acct.ID,
-		Name:      "Rent",
-		Amount:    150000, // $1500.00
-		Frequency: core.FrequencyMonthly,
-		StartDate: date(2025, 1, 1),
+		AccountID:  acct.ID,
+		Name:       "Rent",
+		Amount:     150000, // $1500.00
+		Frequency:  core.FrequencyMonthly,
+		StartDate:  date(2025, 1, 1),
 		DayOfMonth: 1,
 	})
 	if err != nil {
@@ -252,11 +252,11 @@ func TestEndRecurringRule(t *testing.T) {
 
 	t.Run("rejects zero end date", func(t *testing.T) {
 		rule, err := db.CreateRecurringRule(ctx, core.CreateRecurringRuleParams{
-			AccountID:  acct.ID,
-			Name:       "Zero Date Test",
-			Amount:     -100,
-			Frequency:  core.FrequencyWeekly,
-			StartDate:  date(2025, 1, 1),
+			AccountID: acct.ID,
+			Name:      "Zero Date Test",
+			Amount:    -100,
+			Frequency: core.FrequencyWeekly,
+			StartDate: date(2025, 1, 1),
 		})
 		if err != nil {
 			t.Fatalf("CreateRecurringRule: %v", err)

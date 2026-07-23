@@ -425,11 +425,11 @@ func TestRecurringRuleTools(t *testing.T) {
 
 		t.Run("accepts_prefixed_FREQUENCY_MONTHLY", func(t *testing.T) {
 			_, out, err := handler(ctx, nil, CreateRecurringRuleInput{
-				AccountID:  accountID,
-				Name:       "Paycheck",
-				Amount:     300000,
-				Frequency:  "FREQUENCY_BIWEEKLY",
-				StartDate:  "2025-01-10",
+				AccountID: accountID,
+				Name:      "Paycheck",
+				Amount:    300000,
+				Frequency: "FREQUENCY_BIWEEKLY",
+				StartDate: "2025-01-10",
 			})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)

@@ -25,31 +25,31 @@ const (
 
 // RecurringRule represents the read model for a recurring transaction template.
 type RecurringRule struct {
-	ID                     string
-	AccountID              string
-	Name                   string
-	Amount                 int64 // cents
-	Frequency              Frequency
-	StartDate              time.Time
-	EndDate                *time.Time
-	DayOfMonth             int
-	SemiMonthlyDays        [2]int
-	IsTransfer             bool
+	ID                      string
+	AccountID               string
+	Name                    string
+	Amount                  int64 // cents
+	Frequency               Frequency
+	StartDate               time.Time
+	EndDate                 *time.Time
+	DayOfMonth              int
+	SemiMonthlyDays         [2]int
+	IsTransfer              bool
 	TransferTargetAccountID string
-	Paused                 bool
+	Paused                  bool
 }
 
 // RecurringRuleCreatedPayload is the event data for rule creation.
 type RecurringRuleCreatedPayload struct {
-	AccountID              string `json:"account_id"`
-	Name                   string `json:"name"`
-	Amount                 int64  `json:"amount"`
-	Frequency              int    `json:"frequency"`
-	StartDate              string `json:"start_date"`
-	EndDate                string `json:"end_date,omitempty"`
-	DayOfMonth             int    `json:"day_of_month,omitempty"`
-	SemiMonthlyDays        []int  `json:"semi_monthly_days,omitempty"`
-	IsTransfer             bool   `json:"is_transfer,omitempty"`
+	AccountID               string `json:"account_id"`
+	Name                    string `json:"name"`
+	Amount                  int64  `json:"amount"`
+	Frequency               int    `json:"frequency"`
+	StartDate               string `json:"start_date"`
+	EndDate                 string `json:"end_date,omitempty"`
+	DayOfMonth              int    `json:"day_of_month,omitempty"`
+	SemiMonthlyDays         []int  `json:"semi_monthly_days,omitempty"`
+	IsTransfer              bool   `json:"is_transfer,omitempty"`
 	TransferTargetAccountID string `json:"transfer_target_account_id,omitempty"`
 }
 
@@ -74,15 +74,15 @@ type RecurringRuleEndedPayload struct {
 
 // CreateRecurringRuleParams holds validated input for creating a recurring rule.
 type CreateRecurringRuleParams struct {
-	AccountID              string
-	Name                   string
-	Amount                 int64
-	Frequency              Frequency
-	StartDate              time.Time
-	EndDate                *time.Time
-	DayOfMonth             int
-	SemiMonthlyDays        [2]int
-	IsTransfer             bool
+	AccountID               string
+	Name                    string
+	Amount                  int64
+	Frequency               Frequency
+	StartDate               time.Time
+	EndDate                 *time.Time
+	DayOfMonth              int
+	SemiMonthlyDays         [2]int
+	IsTransfer              bool
 	TransferTargetAccountID string
 }
 
@@ -108,16 +108,19 @@ func (db *DB) CreateRecurringRule(ctx context.Context, params CreateRecurringRul
 			return nil, fmt.Errorf("semi_monthly_days must each be 1-31")
 		}
 	}
+	if err := db.validateTransferFields(ctx, params.AccountID, params.IsTransfer, params.TransferTargetAccountID, params.Amount); err != nil {
+		return nil, err
+	}
 
 	id := uuid.New().String()
 
 	p := RecurringRuleCreatedPayload{
-		AccountID:              params.AccountID,
-		Name:                   params.Name,
-		Amount:                 params.Amount,
-		Frequency:              int(params.Frequency),
-		StartDate:              params.StartDate.Format(time.DateOnly),
-		IsTransfer:             params.IsTransfer,
+		AccountID:               params.AccountID,
+		Name:                    params.Name,
+		Amount:                  params.Amount,
+		Frequency:               int(params.Frequency),
+		StartDate:               params.StartDate.Format(time.DateOnly),
+		IsTransfer:              params.IsTransfer,
 		TransferTargetAccountID: params.TransferTargetAccountID,
 	}
 	if params.EndDate != nil {
@@ -181,20 +184,27 @@ func (db *DB) CreateRecurringRule(ctx context.Context, params CreateRecurringRul
 	}
 
 	return &RecurringRule{
-		ID:                     id,
-		AccountID:              params.AccountID,
-		Name:                   params.Name,
-		Amount:                 params.Amount,
-		Frequency:              params.Frequency,
-		StartDate:              params.StartDate,
-		EndDate:                params.EndDate,
-		DayOfMonth:             params.DayOfMonth,
-		SemiMonthlyDays:        params.SemiMonthlyDays,
-		IsTransfer:             params.IsTransfer,
+		ID:                      id,
+		AccountID:               params.AccountID,
+		Name:                    params.Name,
+		Amount:                  params.Amount,
+		Frequency:               params.Frequency,
+		StartDate:               params.StartDate,
+		EndDate:                 params.EndDate,
+		DayOfMonth:              params.DayOfMonth,
+		SemiMonthlyDays:         params.SemiMonthlyDays,
+		IsTransfer:              params.IsTransfer,
 		TransferTargetAccountID: params.TransferTargetAccountID,
-		Paused:                 false,
+		Paused:                  false,
 	}, nil
 }
+
+// recurringRuleColumns is the column list every recurring_rules SELECT must project.
+// scanRecurringRules depends on this exact order, and a mismatch misreads fields at
+// runtime rather than failing to compile — so the order lives here once, not once per
+// query.
+const recurringRuleColumns = `id, account_id, name, amount, frequency, start_date, end_date,
+	 day_of_month, semi_monthly_days, is_transfer, transfer_target_account_id, paused`
 
 // ListRecurringRules returns recurring rules, optionally filtered by account.
 func (db *DB) ListRecurringRules(ctx context.Context, accountID string) ([]RecurringRule, error) {
@@ -202,13 +212,11 @@ func (db *DB) ListRecurringRules(ctx context.Context, accountID string) ([]Recur
 	var err error
 	if accountID != "" {
 		rows, err = db.conn.QueryContext(ctx,
-			`SELECT id, account_id, name, amount, frequency, start_date, end_date,
-			 day_of_month, semi_monthly_days, is_transfer, transfer_target_account_id, paused
+			`SELECT `+recurringRuleColumns+`
 			 FROM recurring_rules WHERE account_id = ? ORDER BY name`, accountID)
 	} else {
 		rows, err = db.conn.QueryContext(ctx,
-			`SELECT id, account_id, name, amount, frequency, start_date, end_date,
-			 day_of_month, semi_monthly_days, is_transfer, transfer_target_account_id, paused
+			`SELECT `+recurringRuleColumns+`
 			 FROM recurring_rules ORDER BY name`)
 	}
 	if err != nil {
@@ -229,14 +237,22 @@ func (db *DB) UpdateRecurringRuleAmount(ctx context.Context, ruleID string, newA
 		return fmt.Errorf("begin tx: %w", err)
 	}
 
+	// Read is_transfer alongside the amount: the positive-magnitude invariant is a
+	// property of the rule, not of the create command, so an edit must not be able
+	// to restore a state creation rejects.
 	var oldAmount int64
-	row := tx.QueryRowContext(ctx, "SELECT amount FROM recurring_rules WHERE id = ?", ruleID)
-	if err := row.Scan(&oldAmount); err != nil {
+	var isTransfer int
+	row := tx.QueryRowContext(ctx, "SELECT amount, is_transfer FROM recurring_rules WHERE id = ?", ruleID)
+	if err := row.Scan(&oldAmount, &isTransfer); err != nil {
 		_ = tx.Rollback()
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("recurring rule %s not found", ruleID)
+			return fmt.Errorf("recurring rule %s not found: %w", ruleID, ErrNotFound)
 		}
 		return fmt.Errorf("read current amount: %w", err)
+	}
+	if err := validateTransferAmount(isTransfer != 0, newAmount); err != nil {
+		_ = tx.Rollback()
+		return err
 	}
 
 	payload, err := json.Marshal(RecurringRuleAmountChangedPayload{
@@ -413,6 +429,46 @@ func scanRecurringRules(rows *sql.Rows) ([]RecurringRule, error) {
 		rules = append(rules, r)
 	}
 	return rules, rows.Err()
+}
+
+// validateTransferAmount enforces the positive-magnitude convention for transfer
+// rules. Both write paths share it so an edit cannot restore an amount that creation
+// would have rejected.
+func validateTransferAmount(isTransfer bool, amount int64) error {
+	if isTransfer && amount <= 0 {
+		return fmt.Errorf("transfer rule amount must be positive, got %d: %w", amount, ErrInvalidInput)
+	}
+	return nil
+}
+
+// validateTransferFields enforces the states the projection engine can honor for a
+// transfer rule. A transfer's amount is a positive magnitude — direction comes from
+// the source/target pair, matching CreateTransfer — and the target must be a real,
+// distinct account, or the credit half of the transfer has nowhere to land.
+func (db *DB) validateTransferFields(ctx context.Context, accountID string, isTransfer bool, targetAccountID string, amount int64) error {
+	if !isTransfer {
+		return nil
+	}
+	if targetAccountID == "" {
+		return fmt.Errorf("transfer rule requires transfer_target_account_id: %w", ErrInvalidInput)
+	}
+	if targetAccountID == accountID {
+		return fmt.Errorf("transfer rule target must differ from its account: %w", ErrInvalidInput)
+	}
+	if err := validateTransferAmount(isTransfer, amount); err != nil {
+		return err
+	}
+
+	var exists int
+	err := db.conn.QueryRowContext(ctx,
+		"SELECT 1 FROM accounts WHERE id = ?", targetAccountID).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("transfer target account %s not found: %w", targetAccountID, ErrInvalidInput)
+	}
+	if err != nil {
+		return fmt.Errorf("check transfer target account: %w", err)
+	}
+	return nil
 }
 
 func boolToInt(b bool) int {
