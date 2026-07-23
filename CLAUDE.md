@@ -25,7 +25,7 @@ Four components communicating via gRPC over Unix socket:
 - **Separate Go modules:** `core/`, `daemon/`, and `mcp/` each have their own `go.mod`.
 - **Pure Go SQLite:** Uses `modernc.org/sqlite` (no cgo required for Go builds).
 - **Buf for protobuf:** `buf.yaml` + `buf.gen.yaml` at repo root. Never use raw `protoc`.
-- **Socket path:** `$XDG_RUNTIME_DIR/finch/finch.sock` (Linux), `/tmp/finch-$UID/finch.sock` (fallback).
+- **Socket path:** `$XDG_RUNTIME_DIR/finch/finch.sock` (Linux), `/tmp/finch-$UID/finch.sock` (macOS). Any other platform is a hard error — there is no fallback.
 - **DB path:** `~/.local/share/finch/finch.db` (Linux), `~/Library/Application Support/finch/finch.db` (macOS). Override with `FINCH_DB_PATH`.
 
 ## Testing
