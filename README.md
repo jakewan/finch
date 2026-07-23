@@ -81,7 +81,74 @@ This builds the daemon, copies it to `~/.local/bin/`, installs the systemd unit,
 just install-mcp
 ```
 
-This builds the MCP binary and copies it to `~/.local/bin/`.
+This builds the MCP binary and copies it to `~/.local/bin/`. That installs the binary and nothing more — an MCP client still has to be told to spawn it, which is the next section. (`just install` does this and the daemon service together.)
+
+### Connect it to an assistant
+
+Finch's MCP server is a stdio server: your assistant spawns it as a child process and talks to it over stdin and stdout. You never launch it yourself.
+
+Finch is build-from-source today — there are no prebuilt binaries — so start by completing [Getting Started](#getting-started), then install the daemon and the MCP server:
+
+```bash
+mise install
+just proto            # daemon/gen/ is generated and not committed; the MCP build needs it
+just all
+just install-service  # the MCP server exits at startup if it can't reach the daemon
+just install-mcp
+```
+
+Running the daemon means Linux with systemd user services. The daemon and MCP server both carry macOS socket paths, but there is no supported way to start the daemon there yet.
+
+**Claude Code:**
+
+```bash
+claude mcp add --scope user finch ~/.local/bin/finch-mcp
+```
+
+`--scope user` makes Finch available in every project. Without it you get `local` scope — private to you, and only in the directory you ran the command from.
+
+**Any other MCP client:** add an entry to the client's MCP configuration file, consulting its documentation for where that file lives:
+
+```json
+{
+  "mcpServers": {
+    "finch": {
+      "command": "/absolute/path/to/finch-mcp"
+    }
+  }
+}
+```
+
+Use an absolute path — many clients don't expand `~`.
+
+Verify by asking your assistant to run Finch's `ping` tool. It reports the daemon version.
+
+#### When the server doesn't start
+
+The MCP server writes errors to stderr, which your client captures in its MCP server log rather than showing you. Read that log first and match the message:
+
+| Message | Cause | Fix |
+|---|---|---|
+| `daemon socket not found at ...` | The daemon isn't running. | `systemctl --user status finch.service` |
+| `XDG_RUNTIME_DIR not set` | The client spawned the server without that variable, which is how the server locates the daemon's socket. A GUI-launched or sandboxed client may not pass it through. | Set it explicitly on the server entry, below. |
+| `ping daemon: ...` | A socket file exists but nothing answers — a crashed daemon that left the socket behind (refused immediately), or a hung one (after a five-second timeout). | `systemctl --user restart finch.service` |
+
+Don't diagnose the second case by checking `$XDG_RUNTIME_DIR/finch/finch.sock` from your shell: your shell has the variable set, so the check passes while the server keeps failing. Pass it through explicitly instead:
+
+```json
+{
+  "mcpServers": {
+    "finch": {
+      "command": "/absolute/path/to/finch-mcp",
+      "env": { "XDG_RUNTIME_DIR": "/run/user/YOUR_UID" }
+    }
+  }
+}
+```
+
+#### Working on Finch itself
+
+Your client spawns the MCP server once, at client startup — there is no live reload. After changing anything under `mcp/`, `proto/`, `core/`, or `daemon/`, reinstall and restart your assistant session. The repo's `mcp-reload` skill (`.claude/skills/mcp-reload/`) walks that loop.
 
 ### Install the desktop app
 
@@ -93,10 +160,15 @@ This builds the Qt app, copies the `finch-app` binary to `~/.local/bin/`, instal
 
 ### Manual
 
+Run the daemon without systemd — an alternative to the service, not a supplement:
+
 ```bash
-daemon/finch-daemon &   # Start the gRPC server
-mcp/finch-mcp           # Start the MCP server (connects to daemon)
+daemon/finch-daemon
 ```
+
+Don't run both. The daemon removes and recreates the socket at startup, so a hand-started daemon silently takes it over from the service and you end up with two processes on the same database.
+
+There is no manual step for the MCP server: your assistant spawns `finch-mcp` itself (see [Connect it to an assistant](#connect-it-to-an-assistant)). Running the binary from a shell only checks that it can reach the daemon — with no client on the other end it just blocks.
 
 ## Project Layout
 
