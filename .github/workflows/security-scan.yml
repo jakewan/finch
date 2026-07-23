@@ -38,6 +38,8 @@ permissions:
 env:
   GO_VERSION: "1.26.5"
   GOVULNCHECK_VERSION: "1.6.0"
+  PROTOC_GEN_GO_VERSION: "1.36.11"
+  PROTOC_GEN_GO_GRPC_VERSION: "1.6.1"
   BUF_VERSION: "1.66.1"
 
 jobs:
@@ -76,6 +78,12 @@ jobs:
           check buf \
             "$(grep -oP '^buf = "\K[^"]+' mise.toml)" \
             "$BUF_VERSION"
+          check protoc-gen-go \
+            "$(grep -oP 'protoc-gen-go" = "\K[^"]+' mise.toml)" \
+            "$PROTOC_GEN_GO_VERSION"
+          check protoc-gen-go-grpc \
+            "$(grep -oP 'protoc-gen-go-grpc" = "\K[^"]+' mise.toml)" \
+            "$PROTOC_GEN_GO_GRPC_VERSION"
           exit $fail
 
       - uses: bufbuild/buf-action@v1
@@ -85,8 +93,8 @@ jobs:
 
       - name: Install protoc plugins
         run: |
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v${{ env.PROTOC_GEN_GO_VERSION }}
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v${{ env.PROTOC_GEN_GO_GRPC_VERSION }}
 
       # daemon and mcp import daemon/gen, which is generated and not committed, so the
       # scan cannot load their packages without this.
