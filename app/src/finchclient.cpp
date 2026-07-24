@@ -333,9 +333,17 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
     // rule that silently projects nothing.
     bool amountOk = false;
     const qlonglong amount = params.value(QStringLiteral("amount")).toLongLong(&amountOk);
-    if (!amountOk || amount == 0) {
+    if (!amountOk) {
+        // Reachable from the UI: the magnitude field caps neither digits nor scale.
         emit recurringRuleCreateFailed(
-            QStringLiteral("That amount is out of range. Please enter a smaller amount."));
+            QStringLiteral("That amount is too large. Please enter a smaller amount."));
+        return;
+    }
+    if (amount == 0) {
+        // Not reachable from the UI — the form requires a magnitude above zero — so a zero here
+        // means the caller built the request wrong rather than the user mistyping.
+        emit recurringRuleCreateFailed(
+            QStringLiteral("Internal error: rule request carried a zero amount."));
         return;
     }
 
