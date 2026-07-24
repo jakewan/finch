@@ -478,4 +478,23 @@ TestCase {
         compare(ctx.form.transferTargets.length, 1)
         compare(ctx.form.transferTargets[idxNoTransfer].id, "")
     }
+
+    // transferAvailable is the only gate on the destination control, so inverting it would make
+    // transfer creation unreachable in the shipping app with every spec still green. Asserted on
+    // the logical property, which is what the visual `visible` binds to.
+    function test_transferAvailableWithOtherAccounts() {
+        var ctx = build({ accountId: "a2" })
+        compare(ctx.form.transferAvailable, true)
+    }
+
+    function test_transferUnavailableWithSingleAccount() {
+        var ctx = build({ accounts: [{ id: "a1", name: "Only" }], accountId: "a1" })
+        compare(ctx.form.transferTargets.length, 1)
+        compare(ctx.form.transferAvailable, false)
+    }
+
+    function test_transferUnavailableBeforeSourceChosen() {
+        var ctx = build()
+        compare(ctx.form.transferAvailable, false)
+    }
 }

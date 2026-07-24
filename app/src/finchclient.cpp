@@ -301,10 +301,13 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
     if (m_createRecurringRuleInProgress)
         return;
 
-    // A params object cannot transpose its arguments, but it trades that for a quieter hazard:
-    // a mistyped or omitted key is not an error — it reads back as an invalid QVariant and
-    // would reach the daemon as an empty field, surfacing as a confusing InvalidArgument about
-    // input the user did supply. Fail here instead, naming the key, so the defect is local.
+    // A params object cannot transpose its arguments, but it trades that for a quieter hazard.
+    // Two distinct defects live here and only one is a missing key: a misspelled *key* is
+    // absent, while a typo in a key's *value* expression yields a present key holding an
+    // invalid QVariant. The second is the dangerous one, because the conversions below turn it
+    // into a plausible value rather than an error — an unusable amount becomes 0, and a bad
+    // isTransfer becomes false, which would persist an outbound transfer as ordinary income on
+    // its source account. So require each key to be present AND valid.
     static const QStringList requiredKeys = {
         QStringLiteral("accountId"), QStringLiteral("name"),
         QStringLiteral("amount"), QStringLiteral("frequency"),
@@ -312,15 +315,27 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
         QStringLiteral("dayOfMonth"), QStringLiteral("semiMonthlyDays"),
         QStringLiteral("isTransfer"), QStringLiteral("transferTargetAccountId")
     };
-    QStringList missingKeys;
+    QStringList badKeys;
     for (const QString& key : requiredKeys) {
-        if (!params.contains(key))
-            missingKeys.append(key);
+        if (!params.contains(key) || !params.value(key).isValid())
+            badKeys.append(key);
     }
-    if (!missingKeys.isEmpty()) {
+    if (!badKeys.isEmpty()) {
         emit recurringRuleCreateFailed(
-            QStringLiteral("Internal error: rule request missing %1.")
-                .arg(missingKeys.join(QStringLiteral(", "))));
+            QStringLiteral("Internal error: rule request missing or unreadable: %1.")
+                .arg(badKeys.join(QStringLiteral(", "))));
+        return;
+    }
+
+    // The amount is the one field whose conversion can fail on an in-range-looking input: a
+    // magnitude past a double's exact-integer ceiling does not fit an int64 and converts to 0.
+    // Neither the daemon nor core validates a non-transfer amount, so a 0 would persist as a
+    // rule that silently projects nothing.
+    bool amountOk = false;
+    const qlonglong amount = params.value(QStringLiteral("amount")).toLongLong(&amountOk);
+    if (!amountOk || amount == 0) {
+        emit recurringRuleCreateFailed(
+            QStringLiteral("That amount is out of range. Please enter a smaller amount."));
         return;
     }
 
@@ -330,9 +345,6 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
     auto stub = m_stub.get();
     std::string accountIdStr = params.value(QStringLiteral("accountId")).toString().toStdString();
     std::string nameStr = params.value(QStringLiteral("name")).toString().toStdString();
-    // toLongLong, not toInt: cents are int64 on the wire and a large amount arrives from QML
-    // as a double, which toInt would truncate.
-    qlonglong amount = params.value(QStringLiteral("amount")).toLongLong();
     int frequency = params.value(QStringLiteral("frequency")).toInt();
     std::string startDateStr = params.value(QStringLiteral("startDate")).toString().toStdString();
     std::string endDateStr = params.value(QStringLiteral("endDate")).toString().toStdString();
@@ -443,7 +455,9 @@ void FinchClient::startRecurringRulesFetch()
             entry["id"] = QString::fromStdString(rule.id());
             entry["accountId"] = QString::fromStdString(rule.account_id());
             entry["name"] = QString::fromStdString(rule.name());
-            // Signed cents; the panel formats and applies the sign.
+            // Signed cents for an ordinary rule, but a POSITIVE magnitude for a transfer, whose
+            // direction comes from the source/target pair rather than the stored sign — see
+            // ruleAmount in txformat.js, which mirrors core's effectOn.
             entry["amount"] = static_cast<qlonglong>(rule.amount());
             // Raw Frequency int; the panel maps it to a human label.
             entry["frequency"] = static_cast<int>(rule.frequency());

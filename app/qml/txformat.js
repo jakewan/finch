@@ -20,6 +20,14 @@ function formatAmount(cents) {
     return (cents < 0 ? "-$" : "$") + Math.abs(cents / 100).toFixed(2)
 }
 
+// Whether a rule actually moves money between two accounts — flagged as a transfer AND carrying
+// a destination. Both halves are required, matching the condition core's effectOn applies before
+// deriving direction. Single definition because every consumer must agree: a renderer that
+// treated a target-less transfer as directed would announce a destination it cannot name.
+function isDirectedTransfer(rule) {
+    return !!(rule && rule.isTransfer && rule.transferTargetAccountId)
+}
+
 // A recurring rule's effect on one account, in signed cents. Mirrors core's effectOn in
 // core/projection.go, branch for branch, so the app and the projection engine cannot disagree
 // about which way a rule moves money.
@@ -34,7 +42,7 @@ function formatAmount(cents) {
 // Takes the viewing account rather than assuming the source, because rules are currently fetched
 // scoped to their owner and that will stop being true once inbound transfers are listable.
 function ruleAmount(rule, accountId) {
-    if (rule.isTransfer && rule.transferTargetAccountId) {
+    if (isDirectedTransfer(rule)) {
         if (accountId === rule.accountId)
             return -rule.amount
         if (accountId === rule.transferTargetAccountId)

@@ -28,7 +28,7 @@ Item {
     property alias errorText: errorLabel.text
     // Amount, its sign, and the cents derivations live in the shared SignedAmountField.
     property alias expense: amountInput.expense
-    property alias previewText: amountInput.previewText
+    readonly property string previewText: amountInput.previewText
     readonly property var signedCents: amountInput.signedCents
     readonly property var unsignedCents: amountInput.unsignedCents
     // A transfer's direction is implied by its source/target pair, so there is no author-chosen

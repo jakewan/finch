@@ -57,9 +57,7 @@ Item {
 
     // Whether the selected rule moves money to another account, and so has a direction to
     // explain. A logical property, not an alias to a Label's visible (unreliable offscreen).
-    readonly property bool detailTransferVisible:
-        selectedRule !== null && selectedRule.isTransfer === true
-        && selectedRule.transferTargetAccountId !== ""
+    readonly property bool detailTransferVisible: TxFormat.isDirectedTransfer(selectedRule)
 
     // An account's display name, falling back to its raw id. Never returns undefined: a miss
     // would otherwise be concatenated into a row label sitting beside a money amount.
@@ -77,7 +75,7 @@ Item {
         if (!rule)
             return ""
         var label = rule.name
-        if (rule.isTransfer && rule.transferTargetAccountId)
+        if (TxFormat.isDirectedTransfer(rule))
             label += " → " + accountName(rule.transferTargetAccountId)
         if (rule.paused)
             label += " (paused)"

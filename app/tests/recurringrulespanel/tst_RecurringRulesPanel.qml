@@ -312,6 +312,20 @@ TestCase {
         compare(ctx.panel.rowLabel(dangling), "Sweep → a9")
     }
 
+    // "Is this a transfer with a destination" must mean one thing everywhere. The row label and
+    // the amount both treat a missing target as not-a-transfer; the detail pane must agree,
+    // rather than announcing a transfer to an account it cannot name.
+    function test_detailPaneHidesTransferRowWhenTargetMissing() {
+        var ctx = build()
+        var noTarget = { id: "r7", accountId: "a1", name: "Odd", amount: 50000, frequency: 4,
+                         startDate: "2025-01-01", endDate: "", dayOfMonth: 1, semiMonthlyDays: [],
+                         isTransfer: true, paused: false }
+        selectAccountWith(ctx, 0, [noTarget])
+        ctx.panel.ruleList.currentIndex = 0
+        compare(ctx.panel.detailTransferVisible, false)
+        compare(ctx.panel.detailTransferText, "")
+    }
+
     function test_pausedTransferShowsBothAnnotations() {
         var ctx = build()
         var paused = { id: "r6", accountId: "a1", name: "To savings", amount: 50000, frequency: 4,
