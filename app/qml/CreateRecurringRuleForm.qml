@@ -31,7 +31,13 @@ Item {
     property alias previewText: amountInput.previewText
     readonly property var signedCents: amountInput.signedCents
     readonly property var unsignedCents: amountInput.unsignedCents
+    // A transfer's direction is implied by its source/target pair, so there is no author-chosen
+    // sign to offer. Single source for both the child control and the specs, which assert this
+    // rather than an effective `visible` read (unreliable offscreen).
     readonly property bool signSelectorVisible: !isTransfer
+    // Whether any other account exists to transfer to. A single-account database has none, and
+    // the control is pointless then.
+    readonly property bool transferAvailable: transferTargets.length > 1
 
     // The destination list: a real "Not a transfer" row at index 0, then every account except
     // the source. The sentinel is a selectable row rather than a placeholder so leaving
@@ -75,7 +81,6 @@ Item {
         } else {
             amountInput.expense = priorExpense
         }
-        errorLabel.text = ""
     }
 
     // A destination held against the previous source's list is meaningless. Index 0 is always
@@ -188,12 +193,12 @@ Item {
         // account list offers no candidate destination (a single-account database).
         Label {
             text: "Transfer to"
-            visible: form.transferTargets.length > 1
+            visible: form.transferAvailable
         }
         ComboBox {
             id: destCombo
             Layout.fillWidth: true
-            visible: form.transferTargets.length > 1
+            visible: form.transferAvailable
             model: form.transferTargets
             textRole: "name"
             // valueRole, so the form submits the row's account id. The model is filtered, so an
@@ -207,9 +212,7 @@ Item {
         SignedAmountField {
             id: amountInput
             Layout.fillWidth: true
-            // A transfer's direction is implied by its source/target pair, so there is no
-            // author-chosen sign to offer.
-            signSelectorVisible: !form.isTransfer
+            signSelectorVisible: form.signSelectorVisible
             onEdited: errorLabel.text = ""
         }
 
