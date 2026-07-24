@@ -239,4 +239,85 @@ TestCase {
         compare(ctx.mock.recurringRulesCallCount, before + 1)
         compare(ctx.mock.lastRulesAccountId, "a1")
     }
+
+    // --- Transfer rules --------------------------------------------------------------------
+
+    // A transfer rule stores a POSITIVE magnitude and belongs to its source account; direction
+    // comes from which side of the transfer the viewing account is on. Rendering the stored
+    // amount as-is would show a $500 outbound transfer as a credit on the account it debits.
+    readonly property var transferRule: {
+        return { id: "r3", accountId: "a1", name: "To savings", amount: 50000, frequency: 4,
+                 startDate: "2025-01-01", endDate: "", dayOfMonth: 1, semiMonthlyDays: [],
+                 isTransfer: true, transferTargetAccountId: "a2", paused: false }
+    }
+
+    // Called by the ListView delegate, so asserting it exercises real production code. Reading
+    // a delegate's contents instead would depend on viewport geometry no spec in this suite
+    // relies on; the row's visual confirmation belongs to manual testing.
+    function test_rowLabelNamesTransferDestination() {
+        var ctx = build()
+        selectAccountWith(ctx, 0, [transferRule])
+        compare(ctx.panel.rowLabel(transferRule), "To savings → Savings")
+    }
+
+    function test_rowAmountIsDebitForSourceAccount() {
+        var ctx = build()
+        selectAccountWith(ctx, 0, [transferRule])
+        compare(ctx.panel.ruleAmountText(transferRule), "-$500.00")
+    }
+
+    function test_nonTransferRowKeepsStoredSign() {
+        var ctx = build()
+        selectAccountWith(ctx, 0, sampleRules)
+        compare(ctx.panel.rowLabel(sampleRules[0]), "Rent")
+        compare(ctx.panel.ruleAmountText(sampleRules[0]), "-$1500.00")
+    }
+
+    function test_detailPaneShowsTransferDirectionAndDestination() {
+        var ctx = build()
+        selectAccountWith(ctx, 0, [transferRule])
+        ctx.panel.ruleList.currentIndex = 0
+        compare(ctx.panel.detailAmountText, "-$500.00")
+        verify(ctx.panel.detailTransferVisible)
+        compare(ctx.panel.detailTransferText, "Out to Savings")
+    }
+
+    function test_detailPaneHidesTransferRowForOrdinaryRule() {
+        var ctx = build()
+        selectAccountWith(ctx, 0, sampleRules)
+        ctx.panel.ruleList.currentIndex = 0
+        compare(ctx.panel.detailTransferVisible, false)
+    }
+
+    // Mirrors core's effectOn, which negates only when a transfer has a target. A rule flagged
+    // as a transfer with no target falls through to its stored signed amount, so the panel and
+    // the projection engine cannot disagree about direction on the same rule.
+    function test_transferWithoutTargetKeepsStoredSign() {
+        var ctx = build()
+        var orphan = { id: "r4", accountId: "a1", name: "Odd", amount: 50000, frequency: 4,
+                       startDate: "2025-01-01", endDate: "", dayOfMonth: 1, semiMonthlyDays: [],
+                       isTransfer: true, transferTargetAccountId: "", paused: false }
+        selectAccountWith(ctx, 0, [orphan])
+        compare(ctx.panel.ruleAmountText(orphan), "$500.00")
+        compare(ctx.panel.rowLabel(orphan), "Odd")
+    }
+
+    // An unknown destination falls back to the raw id — never "undefined" beside a money amount.
+    function test_unknownDestinationFallsBackToId() {
+        var ctx = build()
+        var dangling = { id: "r5", accountId: "a1", name: "Sweep", amount: 50000, frequency: 4,
+                         startDate: "2025-01-01", endDate: "", dayOfMonth: 1, semiMonthlyDays: [],
+                         isTransfer: true, transferTargetAccountId: "a9", paused: false }
+        selectAccountWith(ctx, 0, [dangling])
+        compare(ctx.panel.rowLabel(dangling), "Sweep → a9")
+    }
+
+    function test_pausedTransferShowsBothAnnotations() {
+        var ctx = build()
+        var paused = { id: "r6", accountId: "a1", name: "To savings", amount: 50000, frequency: 4,
+                       startDate: "2025-01-01", endDate: "", dayOfMonth: 1, semiMonthlyDays: [],
+                       isTransfer: true, transferTargetAccountId: "a2", paused: true }
+        selectAccountWith(ctx, 0, [paused])
+        compare(ctx.panel.rowLabel(paused), "To savings → Savings (paused)")
+    }
 }
