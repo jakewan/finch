@@ -17,6 +17,22 @@ TestCase {
     readonly property int idxSemiMonthly: 2
     readonly property int idxMonthly: 3
 
+    // Three accounts, and the transfer specs deliberately source from the MIDDLE one. With a
+    // sentinel row at index 0 and the source filtered out, a source at index 0 makes the
+    // sentinel's +1 shift cancel the filter's -1 shift exactly — filtered row i would then be
+    // accounts[i] at every row, and a spec asserting the submitted id could not tell a correct
+    // currentValue read from an accounts[currentIndex] lookup. Sourcing from a2 breaks that
+    // coincidence: filtered row 1 is a1, while accounts[1] is a2.
+    readonly property var sampleAccounts: [
+        { id: "a1", name: "Checking" },
+        { id: "a2", name: "Savings" },
+        { id: "a3", name: "Credit" }
+    ]
+    // Index 0 is the "Not a transfer" sentinel; 1 and 2 are the two non-source accounts.
+    readonly property int idxNoTransfer: 0
+    readonly property int idxFirstTarget: 1
+    readonly property int idxLastTarget: 2
+
     Component { id: formFactory; CreateRecurringRuleForm {} }
     Component { id: mockFactory; MockFinchClient {} }
 
@@ -28,12 +44,22 @@ TestCase {
     function build(opts) {
         opts = opts || {}
         currentMock = mockFactory.createObject(testCase)
+        // Accounts are set before the form is built so the destination model is populated at
+        // completion, matching how the panel suite seeds its selector.
+        currentMock.accounts = (opts.accounts !== undefined) ? opts.accounts : sampleAccounts
         var props = { client: currentMock }
         if (opts.accountId !== undefined)
             props.accountId = opts.accountId
         currentForm = formFactory.createObject(testCase, props)
         verify(currentForm !== null, "form instantiated")
         return { form: currentForm, mock: currentMock }
+    }
+
+    // A valid weekly rule sourced from the middle account, ready for a destination choice.
+    function fillValidTransferFrom(ctx) {
+        ctx.form.nameText = "To savings"
+        ctx.form.amountText = "500"
+        ctx.form.frequencyIndex = idxWeekly
     }
 
     function cleanup() {
@@ -285,5 +311,171 @@ TestCase {
         ctx.form.submit()
         ctx.form.submit()
         compare(ctx.mock.createRecurringRuleCallCount, 1)
+    }
+
+    // --- Transfer mode ---------------------------------------------------------------------
+
+    // The destination list offers "not a transfer" as a real selectable row, not merely a
+    // placeholder, so a user who picks a destination can get back out without submitting. The
+    // source account is absent, which is what makes choosing it as its own target impossible
+    // rather than merely invalid.
+    function test_transferTargetsExcludeSourceAndOfferSentinel() {
+        var ctx = build({ accountId: "a2" })
+        var targets = ctx.form.transferTargets
+        compare(targets.length, 3)
+        compare(targets[idxNoTransfer].id, "")
+        compare(targets[idxFirstTarget].id, "a1")
+        compare(targets[idxLastTarget].id, "a3")
+    }
+
+    // Sourced from the middle account, filtered row 1 is a1 while accounts[1] is a2 — so this
+    // asserts the form submits the row's *id* and not an index into the unfiltered list.
+    function test_transferSubmitsSelectedRowIdNotIndex() {
+        var ctx = build({ accountId: "a2" })
+        fillValidTransferFrom(ctx)
+        ctx.form.transferTargetIndex = idxFirstTarget
+        ctx.form.submit()
+        compare(ctx.mock.lastCreateIsTransfer, true)
+        compare(ctx.mock.lastCreateTransferTargetAccountId, "a1")
+        compare(ctx.mock.lastCreateAccountId, "a2")
+    }
+
+    function test_transferSubmitsLastRowId() {
+        var ctx = build({ accountId: "a2" })
+        fillValidTransferFrom(ctx)
+        ctx.form.transferTargetIndex = idxLastTarget
+        ctx.form.submit()
+        compare(ctx.mock.lastCreateTransferTargetAccountId, "a3")
+    }
+
+    // A transfer's amount is a positive magnitude — direction comes from the source/target
+    // pair, and both the daemon and core reject a non-positive one. Expense is the form's
+    // default, so a form that passed its signed cents straight through would send -50000.
+    function test_transferSendsPositiveAmountDespiteExpenseDefault() {
+        var ctx = build({ accountId: "a2" })
+        fillValidTransferFrom(ctx)
+        ctx.form.expense = true
+        ctx.form.transferTargetIndex = idxFirstTarget
+        ctx.form.submit()
+        compare(ctx.mock.lastCreateAmount, 50000)
+    }
+
+    // The magnitude is sign-free by construction rather than by negating the signed value —
+    // negation would send a negative amount whenever Income was the standing choice.
+    function test_unsignedCentsPositiveForBothSigns() {
+        var ctx = build({ accountId: "a2" })
+        ctx.form.amountText = "500"
+        ctx.form.expense = true
+        compare(ctx.form.unsignedCents, 50000)
+        ctx.form.expense = false
+        compare(ctx.form.unsignedCents, 50000)
+    }
+
+    // Returning to the sentinel leaves transfer mode — the round trip a placeholder-only
+    // control could not express.
+    function test_returningToSentinelClearsTransfer() {
+        var ctx = build({ accountId: "a2" })
+        fillValidTransferFrom(ctx)
+        ctx.form.transferTargetIndex = idxFirstTarget
+        verify(ctx.form.isTransfer)
+        ctx.form.transferTargetIndex = idxNoTransfer
+        compare(ctx.form.isTransfer, false)
+        ctx.form.submit()
+        compare(ctx.mock.lastCreateIsTransfer, false)
+        compare(ctx.mock.lastCreateTransferTargetAccountId, "")
+    }
+
+    // Switching source must not leave a destination selected against the old list. Asserting
+    // the *submitted* target, not just the selection, is what catches a reset that loses a race
+    // with the model's own re-evaluation.
+    function test_changingSourceDropsHeldDestination() {
+        var ctx = build({ accountId: "a2" })
+        fillValidTransferFrom(ctx)
+        ctx.form.transferTargetIndex = idxFirstTarget
+        ctx.form.accountId = "a3"
+        compare(ctx.form.isTransfer, false)
+        ctx.form.submit()
+        compare(ctx.mock.lastCreateIsTransfer, false)
+        compare(ctx.mock.lastCreateTransferTargetAccountId, "")
+    }
+
+    // A follow-up rule must not silently inherit transfer mode from the one just created.
+    function test_successResetsDestinationToSentinel() {
+        var ctx = build({ accountId: "a2" })
+        fillValidTransferFrom(ctx)
+        ctx.form.transferTargetIndex = idxFirstTarget
+        ctx.form.submit()
+        ctx.mock.succeedCreateRecurringRule("rule-1")
+        compare(ctx.form.isTransfer, false)
+        compare(ctx.form.transferTargetIndex, idxNoTransfer)
+    }
+
+    // Direction is implied by the source/target pair, so the Expense/Income choice is
+    // meaningless in transfer mode and the control goes away. Asserted on the logical property,
+    // never on `visible`, which reads false offscreen regardless.
+    function test_signSelectorSuppressedInTransferMode() {
+        var ctx = build({ accountId: "a2" })
+        compare(ctx.form.signSelectorVisible, true)
+        ctx.form.transferTargetIndex = idxFirstTarget
+        compare(ctx.form.signSelectorVisible, false)
+        ctx.form.transferTargetIndex = idxNoTransfer
+        compare(ctx.form.signSelectorVisible, true)
+    }
+
+    // The preview must describe the leg the rule actually writes. Entering transfer mode with
+    // Income standing would otherwise leave a green "+" preview above a rule that debits the
+    // source — the app stating the wrong direction at the moment of authoring.
+    function test_transferPreviewReadsAsDebit() {
+        var ctx = build({ accountId: "a2" })
+        ctx.form.amountText = "500"
+        ctx.form.expense = false
+        compare(ctx.form.previewText, "$500.00")
+        ctx.form.transferTargetIndex = idxFirstTarget
+        compare(ctx.form.previewText, "-$500.00")
+    }
+
+    // Leaving transfer mode restores the sign the user had chosen rather than silently
+    // discarding it, matching the form's standing posture of preserving in-progress input.
+    function test_leavingTransferModeRestoresPriorSign() {
+        var ctx = build({ accountId: "a2" })
+        ctx.form.amountText = "500"
+        ctx.form.expense = false
+        ctx.form.transferTargetIndex = idxFirstTarget
+        compare(ctx.form.expense, true)
+        ctx.form.transferTargetIndex = idxNoTransfer
+        compare(ctx.form.expense, false)
+    }
+
+    // Past the 32-bit ceiling, and positive: a transfer magnitude must survive the same way
+    // the signed path does.
+    function test_largeTransferAmountStaysPositive() {
+        var ctx = build({ accountId: "a2" })
+        ctx.form.nameText = "Payoff sweep"
+        ctx.form.amountText = "30000000"
+        ctx.form.frequencyIndex = idxWeekly
+        ctx.form.transferTargetIndex = idxFirstTarget
+        ctx.form.submit()
+        compare(ctx.mock.lastCreateAmount, 3000000000)
+    }
+
+    // A stale daemon error (e.g. a rejected target) must not survive the correction, matching
+    // every other input in the form.
+    function test_destinationChangeClearsError() {
+        var ctx = build({ accountId: "a2" })
+        fillValidTransferFrom(ctx)
+        ctx.form.submit()
+        ctx.mock.failCreateRecurringRule("transfer target account not found")
+        compare(ctx.form.errorText, "transfer target account not found")
+        ctx.form.transferTargetIndex = idxFirstTarget
+        compare(ctx.form.errorText, "")
+    }
+
+    // With no source chosen the form is disabled anyway, but the list must not offer a
+    // destination before a source exists.
+    function test_noSourceOffersOnlySentinel() {
+        var ctx = build()
+        compare(ctx.form.accountId, "")
+        compare(ctx.form.transferTargets.length, 1)
+        compare(ctx.form.transferTargets[idxNoTransfer].id, "")
     }
 }

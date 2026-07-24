@@ -15,16 +15,27 @@ Item {
     // Expense (true, default) vs Income. The magnitude field cannot carry a sign, so this
     // toggle alone decides whether cents are negative or positive.
     property bool expense: true
+    // Hosts whose value has no user-chosen direction hide the toggle — a recurring transfer's
+    // direction comes from its source/target pair, not from the author. Kept as a plain
+    // property (not an alias to the row's `visible`) because an effective-visibility read is
+    // unreliable offscreen, so this is what a spec asserts.
+    property bool signSelectorVisible: true
 
     // parseFloat is NaN when blank or non-numeric; the regex validator already forbids a sign
     // or a comma decimal, so parseFloat reads the magnitude locale-cleanly.
     readonly property real magnitude: parseFloat(amountField.text)
     // Reject 0 and NaN: a $0 entry is meaningless, and the daemon does not validate amount.
     readonly property bool amountValid: !isNaN(magnitude) && magnitude > 0
-    // Math.round avoids float drift (12.34 * 100 -> 1233.9999…); the toggle applies the sign.
+    // Math.round avoids float drift (12.34 * 100 -> 1233.9999…).
     // Typed var, not int: cents cross into a 64-bit qlonglong and a QML int is 32-bit — an int
     // would overflow above ~$21.5M. A JS number marshals to qlonglong exactly (< 2^53).
-    readonly property var signedCents: amountValid ? Math.round(magnitude * 100) * (expense ? -1 : 1) : 0
+    //
+    // The unsigned magnitude is its own property rather than something a host derives by
+    // negating signedCents: a host that needs a positive value (a transfer, whose amount is a
+    // magnitude the daemon rejects unless positive) would otherwise send a negative one
+    // whenever Income was the standing choice. Sign-free by construction.
+    readonly property var unsignedCents: amountValid ? Math.round(magnitude * 100) : 0
+    readonly property var signedCents: amountValid ? unsignedCents * (expense ? -1 : 1) : 0
     readonly property string previewText: amountValid ? TxFormat.formatAmount(signedCents) : ""
 
     // Emitted on any edit (magnitude or sign) so the host can clear a stale error message.
@@ -66,6 +77,7 @@ Item {
         // expresses direction — a control that can't express the wrong value.
         RowLayout {
             spacing: 12
+            visible: control.signSelectorVisible
             ButtonGroup { id: signGroup }
             RadioButton {
                 text: "Expense"
