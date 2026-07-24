@@ -79,9 +79,20 @@ Item {
         // frequency switch is never persisted.
         var dom = isMonthly ? dayOfMonthValue : 0
         var semis = isSemiMonthly ? [semiDay1Value, semiDay2Value] : []
-        client.createRecurringRule(accountId, nameField.text.trim(), signedCents,
-                                   freqCombo.currentValue, startDateField.text,
-                                   endDateField.text, dom, semis)
+        // A params object, not positional args: named fields make a transpose impossible, and
+        // the key names here are the contract the C++ side unpacks.
+        client.createRecurringRule({
+            accountId: accountId,
+            name: nameField.text.trim(),
+            amount: signedCents,
+            frequency: freqCombo.currentValue,
+            startDate: startDateField.text,
+            endDate: endDateField.text,
+            dayOfMonth: dom,
+            semiMonthlyDays: semis,
+            isTransfer: false,
+            transferTargetAccountId: ""
+        })
     }
 
     Connections {

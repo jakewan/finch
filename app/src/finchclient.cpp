@@ -294,29 +294,58 @@ void FinchClient::recordTransaction(const QString& accountId, const QString& dat
     m_recordTransactionWatcher.setFuture(future);
 }
 
-void FinchClient::createRecurringRule(const QString& accountId, const QString& name,
-                                      qlonglong amount, int frequency,
-                                      const QString& startDate, const QString& endDate,
-                                      int dayOfMonth, const QVariantList& semiMonthlyDays)
+void FinchClient::createRecurringRule(const QVariantMap& params)
 {
     // Authoritative re-entrancy guard, mirroring createAccount/recordTransaction: the QML
     // submit-disable is cosmetic, so without this a rapid double-submit could create two rules.
     if (m_createRecurringRuleInProgress)
         return;
 
+    // A params object cannot transpose its arguments, but it trades that for a quieter hazard:
+    // a mistyped or omitted key is not an error — it reads back as an invalid QVariant and
+    // would reach the daemon as an empty field, surfacing as a confusing InvalidArgument about
+    // input the user did supply. Fail here instead, naming the key, so the defect is local.
+    static const QStringList requiredKeys = {
+        QStringLiteral("accountId"), QStringLiteral("name"),
+        QStringLiteral("amount"), QStringLiteral("frequency"),
+        QStringLiteral("startDate"), QStringLiteral("endDate"),
+        QStringLiteral("dayOfMonth"), QStringLiteral("semiMonthlyDays"),
+        QStringLiteral("isTransfer"), QStringLiteral("transferTargetAccountId")
+    };
+    QStringList missingKeys;
+    for (const QString& key : requiredKeys) {
+        if (!params.contains(key))
+            missingKeys.append(key);
+    }
+    if (!missingKeys.isEmpty()) {
+        emit recurringRuleCreateFailed(
+            QStringLiteral("Internal error: rule request missing %1.")
+                .arg(missingKeys.join(QStringLiteral(", "))));
+        return;
+    }
+
     m_createRecurringRuleInProgress = true;
     emit createRecurringRuleInProgressChanged();
 
     auto stub = m_stub.get();
-    std::string accountIdStr = accountId.toStdString();
-    std::string nameStr = name.toStdString();
-    std::string startDateStr = startDate.toStdString();
-    std::string endDateStr = endDate.toStdString();
+    std::string accountIdStr = params.value(QStringLiteral("accountId")).toString().toStdString();
+    std::string nameStr = params.value(QStringLiteral("name")).toString().toStdString();
+    // toLongLong, not toInt: cents are int64 on the wire and a large amount arrives from QML
+    // as a double, which toInt would truncate.
+    qlonglong amount = params.value(QStringLiteral("amount")).toLongLong();
+    int frequency = params.value(QStringLiteral("frequency")).toInt();
+    std::string startDateStr = params.value(QStringLiteral("startDate")).toString().toStdString();
+    std::string endDateStr = params.value(QStringLiteral("endDate")).toString().toStdString();
+    int dayOfMonth = params.value(QStringLiteral("dayOfMonth")).toInt();
+    bool isTransfer = params.value(QStringLiteral("isTransfer")).toBool();
+    std::string transferTargetStr =
+        params.value(QStringLiteral("transferTargetAccountId")).toString().toStdString();
     QList<int> semiDays;
-    for (const auto& d : semiMonthlyDays)
+    for (const auto& d : params.value(QStringLiteral("semiMonthlyDays")).toList())
         semiDays.append(d.toInt());
     auto future = QtConcurrent::run([stub, accountIdStr, nameStr, amount, frequency,
-                                     startDateStr, endDateStr, dayOfMonth,
+                                     startDateStr, endDateStr, dayOfMonth, isTransfer,
+                                     transferTargetStr,
                                      semiDays]() -> CreateRecurringRuleResult {
         grpc::ClientContext context;
         context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
@@ -331,8 +360,12 @@ void FinchClient::createRecurringRule(const QString& accountId, const QString& n
         request.set_day_of_month(dayOfMonth);
         for (int d : semiDays)
             request.add_semi_monthly_days(d);
-        // Transfers are a distinct create mode not yet exposed in the UI.
-        request.set_is_transfer(false);
+        // A transfer's amount is a positive magnitude and its direction comes from the
+        // source/target pair, so the form sends the unsigned value and the daemon rejects a
+        // non-positive one. Both fields go together: the daemon requires a target whenever
+        // is_transfer is set.
+        request.set_is_transfer(isTransfer);
+        request.set_transfer_target_account_id(transferTargetStr);
 
         finch::v1::CreateRecurringRuleResponse response;
         grpc::Status grpcStatus = stub->CreateRecurringRule(&context, request, &response);

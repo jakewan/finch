@@ -49,8 +49,7 @@ QtObject {
     property int recordCallCount: 0
 
     // CreateRecurringRuleForm drives these; default in-progress false so the form starts
-    // enabled. Each arg is captured separately so a spec can catch a transpose in the 8-arg
-    // positional call.
+    // enabled. Each field is captured separately so a spec can assert them independently.
     property bool createRecurringRuleInProgress: false
     property string lastCreateAccountId: ""
     property string lastCreateName: ""
@@ -60,6 +59,12 @@ QtObject {
     property string lastCreateEndDate: ""
     property int lastCreateDayOfMonth: -1
     property var lastCreateSemiMonthlyDays: []
+    property bool lastCreateIsTransfer: false
+    property string lastCreateTransferTargetAccountId: ""
+    // The params object trades the positional-transpose hazard for a silent-key one: a
+    // mistyped key is not an error, it just arrives absent. Recording the key set lets a spec
+    // pin the contract the C++ reader depends on.
+    property var lastCreateKeys: []
     property int createRecurringRuleCallCount: 0
 
     signal accountCreated(string id)
@@ -113,16 +118,21 @@ QtObject {
     }
 
     // Mirror the real client: in-progress latches true synchronously on the call and clears
-    // when the test drives a terminal outcome via succeed/failCreateRecurringRule().
-    function createRecurringRule(accountId, name, amount, frequency, startDate, endDate, dayOfMonth, semiMonthlyDays) {
-        lastCreateAccountId = accountId
-        lastCreateName = name
-        lastCreateAmount = amount
-        lastCreateFrequency = frequency
-        lastCreateStartDate = startDate
-        lastCreateEndDate = endDate
-        lastCreateDayOfMonth = dayOfMonth
-        lastCreateSemiMonthlyDays = semiMonthlyDays
+    // when the test drives a terminal outcome via succeed/failCreateRecurringRule(). Takes the
+    // same single params object the real Q_INVOKABLE does, so the key names a spec pins here
+    // are the key names the C++ side reads.
+    function createRecurringRule(params) {
+        lastCreateAccountId = params.accountId
+        lastCreateName = params.name
+        lastCreateAmount = params.amount
+        lastCreateFrequency = params.frequency
+        lastCreateStartDate = params.startDate
+        lastCreateEndDate = params.endDate
+        lastCreateDayOfMonth = params.dayOfMonth
+        lastCreateSemiMonthlyDays = params.semiMonthlyDays
+        lastCreateIsTransfer = params.isTransfer
+        lastCreateTransferTargetAccountId = params.transferTargetAccountId
+        lastCreateKeys = Object.keys(params).sort()
         createRecurringRuleCallCount += 1
         createRecurringRuleInProgress = true
     }

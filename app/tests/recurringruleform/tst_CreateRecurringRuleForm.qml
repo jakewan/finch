@@ -96,8 +96,12 @@ TestCase {
     }
 
     // A weekly rule sends signed cents, the trimmed name, the account, frequency value 1, the
-    // start date, an empty end date, day-of-month 0 and no semi-monthly days. Each arg is
-    // asserted independently — an 8-arg positional call is a transpose waiting to happen.
+    // start date, an empty end date, day-of-month 0, no semi-monthly days, and — with no
+    // destination chosen — no transfer. Each field is asserted independently.
+    //
+    // The empty target matters beyond completeness: core persists a non-empty
+    // transfer_target_account_id regardless of is_transfer, so a form that sent the picker's
+    // value unconditionally would write phantom-target rules.
     function test_submitSendsWeeklyArgs() {
         var ctx = build({ accountId: "a1" })
         ctx.form.nameText = "  Gym  "
@@ -115,6 +119,20 @@ TestCase {
         compare(ctx.mock.lastCreateEndDate, "")
         compare(ctx.mock.lastCreateDayOfMonth, 0)
         compare(ctx.mock.lastCreateSemiMonthlyDays.length, 0)
+        compare(ctx.mock.lastCreateIsTransfer, false)
+        compare(ctx.mock.lastCreateTransferTargetAccountId, "")
+    }
+
+    // The params object removes the positional-transpose hazard but adds a silent one: a
+    // mistyped key arrives absent rather than erroring. This pins the exact key set the C++
+    // reader unpacks, which no other spec can reach across the QML/C++ seam.
+    function test_submitSendsExpectedParamKeys() {
+        var ctx = build({ accountId: "a1" })
+        fillValidWeekly(ctx)
+        ctx.form.submit()
+        compare(ctx.mock.lastCreateKeys.join(","),
+                "accountId,amount,dayOfMonth,endDate,frequency,isTransfer,name,"
+                + "semiMonthlyDays,startDate,transferTargetAccountId")
     }
 
     function test_incomeIsPositive() {

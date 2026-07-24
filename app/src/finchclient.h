@@ -9,6 +9,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
+#include <QVariantMap>
 #include <memory>
 
 #include <grpcpp/grpcpp.h>
@@ -119,10 +120,10 @@ public:
     Q_INVOKABLE void recordTransaction(const QString& accountId, const QString& date,
                                        qlonglong amount, const QString& name,
                                        const QString& description, int status);
-    Q_INVOKABLE void createRecurringRule(const QString& accountId, const QString& name,
-                                         qlonglong amount, int frequency,
-                                         const QString& startDate, const QString& endDate,
-                                         int dayOfMonth, const QVariantList& semiMonthlyDays);
+    // Takes a params object rather than positional arguments: the call carries ten fields, and
+    // named keys remove the transpose hazard that many positional arguments invite. The
+    // required keys are enumerated (and enforced) in the implementation.
+    Q_INVOKABLE void createRecurringRule(const QVariantMap& params);
     Q_INVOKABLE void listRecurringRules(const QString& accountId);
     Q_INVOKABLE void fetchTimeSeries(const QString& fromDate, const QString& toDate,
                                      int interval, const QStringList& accountIds);
