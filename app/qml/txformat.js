@@ -42,13 +42,28 @@ function isDirectedTransfer(rule) {
 // Takes the viewing account rather than assuming the source, because rules are currently fetched
 // scoped to their owner and that will stop being true once inbound transfers are listable.
 function ruleAmount(rule, accountId) {
-    if (isDirectedTransfer(rule)) {
-        if (accountId === rule.accountId)
-            return -rule.amount
-        if (accountId === rule.transferTargetAccountId)
-            return rule.amount
-    }
+    var direction = transferDirection(rule, accountId)
+    if (direction === "out")
+        return -rule.amount
+    if (direction === "in")
+        return rule.amount
     return rule.amount
+}
+
+// Which side of a transfer the viewing account sits on: "out" when it is the source being
+// debited, "in" when it is the destination being credited, "" when the rule is not a directed
+// transfer or touches this account on neither side.
+//
+// The single side test, so a rule's amount and the labels beside it cannot disagree about
+// direction — a row reading "out to X" above a credited amount would contradict itself.
+function transferDirection(rule, accountId) {
+    if (!isDirectedTransfer(rule))
+        return ""
+    if (accountId === rule.accountId)
+        return "out"
+    if (accountId === rule.transferTargetAccountId)
+        return "in"
+    return ""
 }
 
 // Frequency enum (proto int 1-5) -> human label. Mirrors the proto values (Weekly=1 …

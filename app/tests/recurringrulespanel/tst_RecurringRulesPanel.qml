@@ -312,6 +312,22 @@ TestCase {
         compare(ctx.panel.rowLabel(dangling), "Sweep → a9")
     }
 
+    // Viewed from the account a transfer CREDITS, every rendering must flip: the amount is a
+    // credit, the row points inward, and the detail pane names the payer rather than the payee.
+    // Not reachable through the real client yet (rules are fetched scoped to their owner), but
+    // the amount already derives direction from the viewing account, so the labels beside it
+    // must agree rather than reading as outbound regardless.
+    function test_transferViewedFromDestinationReadsInbound() {
+        var ctx = build()
+        selectAccountWith(ctx, 1, [transferRule])   // index 1 is Savings, the rule's target
+        compare(ctx.panel.currentAccountId, "a2")
+        compare(ctx.panel.ruleAmountText(transferRule), "$500.00")
+        compare(ctx.panel.rowLabel(transferRule), "To savings ← Checking")
+        ctx.panel.ruleList.currentIndex = 0
+        verify(ctx.panel.detailTransferVisible)
+        compare(ctx.panel.detailTransferText, "In from Checking")
+    }
+
     // "Is this a transfer with a destination" must mean one thing everywhere. The row label and
     // the amount both treat a missing target as not-a-transfer; the detail pane must agree,
     // rather than announcing a transfer to an account it cannot name.

@@ -57,7 +57,10 @@ Item {
 
     // Whether the selected rule moves money to another account, and so has a direction to
     // explain. A logical property, not an alias to a Label's visible (unreliable offscreen).
-    readonly property bool detailTransferVisible: TxFormat.isDirectedTransfer(selectedRule)
+    // Keyed on the side test, not merely on being a transfer: a rule touching neither side would
+    // otherwise show the row with nothing in it.
+    readonly property bool detailTransferVisible:
+        TxFormat.transferDirection(selectedRule, currentAccountId) !== ""
 
     // An account's display name, falling back to its raw id. Never returns undefined: a miss
     // would otherwise be concatenated into a row label sitting beside a money amount.
@@ -75,8 +78,11 @@ Item {
         if (!rule)
             return ""
         var label = rule.name
-        if (TxFormat.isDirectedTransfer(rule))
+        var direction = TxFormat.transferDirection(rule, currentAccountId)
+        if (direction === "out")
             label += " → " + accountName(rule.transferTargetAccountId)
+        else if (direction === "in")
+            label += " ← " + accountName(rule.accountId)
         if (rule.paused)
             label += " (paused)"
         return label
@@ -234,9 +240,15 @@ Item {
                     Label {
                         id: detailTransfer
                         visible: panel.detailTransferVisible
-                        text: panel.detailTransferVisible
-                              ? "Out to " + panel.accountName(panel.selectedRule.transferTargetAccountId)
-                              : ""
+                        text: {
+                            var direction =
+                                TxFormat.transferDirection(panel.selectedRule, panel.currentAccountId)
+                            if (direction === "out")
+                                return "Out to " + panel.accountName(panel.selectedRule.transferTargetAccountId)
+                            if (direction === "in")
+                                return "In from " + panel.accountName(panel.selectedRule.accountId)
+                            return ""
+                        }
                     }
 
                     Label { text: "Frequency"; font.bold: true }
