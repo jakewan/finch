@@ -21,11 +21,36 @@ Item {
     // unreliable offscreen, so this is what a spec asserts.
     property bool signSelectorVisible: true
 
-    // parseFloat is NaN when blank or non-numeric; the regex validator already forbids a sign
-    // or a comma decimal, so parseFloat reads the magnitude locale-cleanly.
+    // The one accepted-text pattern, enforced in two places: the field's validator (which gates
+    // typed keystrokes) and amountValid (which gates everything else). A property write bypasses
+    // the validator entirely — every spec and every host sets amountText directly — so a shape
+    // the predicate does not also refuse is accepted in practice.
+    //
+    // Two properties of this literal are correctness-critical, not stylistic:
+    //   - No `g` flag. A global JS regex carries lastIndex across .test() calls, so consecutive
+    //     evaluations of the same text would alternate true/false. Only the predicate side would
+    //     be affected, which would present as an inexplicable binding bug.
+    //   - The ^…$ anchors. RegularExpressionValidator matches against the whole input, but JS
+    //     .test() substring-searches unless anchored — so dropping them would have the predicate
+    //     accept "12.34abc" while the validator rejected it, reopening this exact hole.
+    //
+    // Locale-independent: always ".", never a comma decimal (parseFloat truncates "19,99" to
+    // 19), and no leading "-" so the Expense/Income toggle stays the sole sign source. At most 2
+    // decimals, so no entry can carry precision that rounding would silently discard. The 12
+    // integer digits cap the amount just under $1 trillion, which keeps cents at or below
+    // ~1.0e14 — comfortably inside the 2^53 ceiling where a JS number still represents integers
+    // exactly on its way to a 64-bit sink. A trailing bare "." stays legal so typing one is not
+    // rejected mid-entry.
+    readonly property var amountPattern: /^\d{1,12}(\.\d{0,2})?$/
+
+    // parseFloat reads the magnitude locale-cleanly because the pattern above forbids a sign and
+    // a comma decimal. NaN when blank or non-numeric.
     readonly property real magnitude: parseFloat(amountField.text)
-    // Reject 0 and NaN: a $0 entry is meaningless, and the daemon does not validate amount.
-    readonly property bool amountValid: !isNaN(magnitude) && magnitude > 0
+    // Reject 0: a $0 entry is meaningless, and neither the daemon nor core validates amount. No
+    // separate isNaN check — NaN > 0 is false — and no separate magnitude bound, because the
+    // pattern's digit cap *is* the bound. Two numeric bounds would be two different limits
+    // wearing one name.
+    readonly property bool amountValid: amountPattern.test(amountField.text) && magnitude > 0
     // Math.round avoids float drift (12.34 * 100 -> 1233.9999…).
     // Typed var, not int: cents cross into a 64-bit qlonglong and a QML int is 32-bit — an int
     // would overflow above ~$21.5M. A JS number marshals to qlonglong exactly (< 2^53).
@@ -58,10 +83,11 @@ Item {
                 Layout.fillWidth: true
                 placeholderText: "0.00"
                 inputMethodHints: Qt.ImhFormattedNumbersOnly
-                // Locale-independent: always ".", forbids a leading "-" so the Expense/Income
-                // toggle is the sole sign source, caps at 2 decimals. A default-locale
-                // DoubleValidator would accept "19,99", which parseFloat truncates to 19.
-                validator: RegularExpressionValidator { regularExpression: /^\d+(\.\d{0,2})?$/ }
+                // Shares control.amountPattern with amountValid — see there for why the shape is
+                // enforced in both places and which parts of the literal are load-bearing.
+                validator: RegularExpressionValidator {
+                    regularExpression: control.amountPattern
+                }
                 onTextChanged: control.edited()
             }
 

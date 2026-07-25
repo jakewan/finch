@@ -105,6 +105,31 @@ TestCase {
         compare(ctx.form.canSubmit, false)
     }
 
+    // Shapes the keystroke validator refuses but a property write still delivers — and every
+    // spec and host writes amountText directly, so the predicate has to refuse them too rather
+    // than trusting the validator to have filtered them. Three decimals is the one that
+    // corrupted silently: it parsed, passed, and recorded a rounded amount the user never
+    // typed. Table-driven because the four shapes share one expectation.
+    function test_rejectsAmountShapesItCannotCarry_data() {
+        return [
+            { tag: "three decimals", text: "12.345" },
+            { tag: "exponent overflowing to Infinity", text: "1e400" },
+            { tag: "modest exponent", text: "1e3" },
+            { tag: "trailing garbage", text: "12.34abc" }
+        ]
+    }
+
+    function test_rejectsAmountShapesItCannotCarry(data) {
+        var ctx = build({ accountId: "a1" })
+        ctx.form.nameText = "Coffee"
+        ctx.form.amountText = data.text
+        compare(ctx.form.canSubmit, false)
+        compare(ctx.form.signedCents, 0)
+        compare(ctx.form.previewText, "")
+        ctx.form.submit()
+        compare(ctx.mock.recordCallCount, 0)
+    }
+
     // submit() sends signed cents, trimmed name, the date, description, status Reconciled (3),
     // and the injected accountId. lastRecordName and lastRecordDescription are asserted
     // INDEPENDENTLY — a 6-arg positional Q_INVOKABLE with two adjacent strings is a transpose
@@ -159,6 +184,31 @@ TestCase {
         compare(ctx.form.signedCents, -3000000000)
         ctx.form.submit()
         compare(ctx.mock.lastRecordAmount, -3000000000)
+    }
+
+    // The largest amount the control accepts — 12 integer digits — records exactly. That bound
+    // exists so cents stay well under 2^53, past which a JS number stops representing integers
+    // faithfully and the value would drift on its way to a 64-bit sink.
+    function test_amountAtCapSubmitsExactCents() {
+        var ctx = build({ accountId: "a1" })
+        ctx.form.nameText = "Portfolio"
+        ctx.form.amountText = "999999999999.99"
+        ctx.form.expense = true
+        compare(ctx.form.signedCents, -99999999999999)
+        ctx.form.submit()
+        compare(ctx.mock.lastRecordAmount, -99999999999999)
+    }
+
+    // One integer digit past the cap. Set programmatically, since the keystroke validator
+    // refuses the 13th digit — which is exactly why the predicate must refuse it independently.
+    function test_amountPastCapIsRefused() {
+        var ctx = build({ accountId: "a1" })
+        ctx.form.nameText = "Too much"
+        ctx.form.amountText = "1000000000000"
+        compare(ctx.form.canSubmit, false)
+        compare(ctx.form.signedCents, 0)
+        ctx.form.submit()
+        compare(ctx.mock.recordCallCount, 0)
     }
 
     // Preview shows the signed amount and flips with the toggle; empty when magnitude invalid.
