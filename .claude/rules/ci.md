@@ -16,11 +16,15 @@ This list is the single source of truth for the supplies below — they referenc
 
 `just vuln` scans all three Go modules with `govulncheck`. It is deliberately **not** in the list above: the scan takes minutes, and that list feeds the pre-merge and readiness supplies, so including it would impose the cost at every merge on top of CI already running it. It is also not in the pre-push hook, for the same reason. Run it when changing dependencies or when you want the answer before pushing; otherwise let CI be the enforcing surface.
 
-It needs generated proto code, so run `just proto` first.
+Its daemon and mcp legs regenerate protobuf code first, declared as a recipe prerequisite, so the scan needs no manual setup.
 
 ### What the gate guarantees
 
 `govulncheck` fails only on advisories it can **statically reach** from finch's own code. A scan reports a silent tail of advisories in imported packages and required modules that never surface, and static reachability is defeated by reflection and interface dispatch. So a green scan means "no reachable advisory," not "no known-vulnerable dependency." The broader question — is any dependency in the graph known-vulnerable at all — is answered by Dependabot alerts, which cover the full transitive closure but cannot tell you whether the code is reachable. The two are complements; neither alone is coverage.
+
+So when scoping a dependency bump, read both surfaces rather than whichever one raised the alarm. For the scanner, `govulncheck -C <core|daemon|mcp> -scan module` lists every advisory affecting a module in the graph with no reachability filtering — it lifts the reachability limits described above, not the database-coverage limit described below. Two notes on the form: module mode takes no package pattern, so a trailing `./...` is rejected, and it still loads packages, so run `just proto` first — this is a raw invocation rather than a recipe, so nothing declares that prerequisite on your behalf. For the alerts, `gh api repos/{owner}/{repo}/dependabot/alerts` — `.github/dependabot.yml` configures version updates rather than advisories, so it cannot answer this.
+
+Each surface can be the only one that sees a given advisory. A Dependabot alert names **one** advisory, and its stated fix version clears that advisory rather than the package — an unalerted sibling in the same package can need a higher version. Going the other way, an advisory with no Go vulnerability database entry is invisible to `govulncheck` in every mode, and Dependabot is the only place it appears. A bump scoped from one surface alone closes some of what it looks like it closed.
 
 The scan covers Go modules only. The Qt app's C++ dependencies (gRPC and protobuf from apt, Qt from the install action) are covered by neither mechanism.
 

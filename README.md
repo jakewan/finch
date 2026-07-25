@@ -65,7 +65,7 @@ just build-app     # Build the Qt desktop app
 just test          # Run all Go tests
 just test-app      # Build and run the Qt app's Qt Quick Test suite
 just lint          # Run golangci-lint on all modules
-just vuln          # Scan Go modules for known vulnerabilities (run just proto first)
+just vuln          # Scan Go modules for known vulnerabilities
 ```
 
 ## Running Locally

@@ -6,7 +6,9 @@
 
 ## Just Targets
 
-`just proto` MUST run before `just build-*`. The `just all` target runs the full dependency chain: proto → build-daemon → build-mcp. Per-module targets (`test-core`, `lint-daemon`, etc.) exist for focused development.
+Generated code is a prerequisite of every target that loads a daemon or mcp package — building, testing, linting, scanning, and `just tidy` alike, since production and test files in both modules import `daemon/gen/`. Each of those recipes declares `proto` as a dependency rather than relying on the caller to remember, and `just` runs it once per invocation however many legs ask for it. The `core` recipes deliberately do not, so `just test-core` and its siblings need no protobuf toolchain. Per-module targets (`test-core`, `lint-daemon`, etc.) exist for focused development.
+
+A recipe that loads Go packages without generated code present does not degrade quietly — it fails to load, naming the missing `daemon/gen/finch/v1` import. Any new recipe touching daemon or mcp wants the same `proto` dependency.
 
 ## Embedded Migrations
 

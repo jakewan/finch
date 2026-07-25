@@ -8,7 +8,7 @@ just all      # Build everything
 just test     # Run all tests
 just lint     # Run linters
 just proto    # Regenerate protobuf code
-just vuln     # Scan Go modules for known vulnerabilities (needs `just proto` first)
+just vuln     # Scan Go modules for known vulnerabilities
 ```
 
 ## Architecture
@@ -42,7 +42,9 @@ just test-mcp     # MCP server only
 
 The daemon and mcp modules depend on core via `replace` directives pointing to `../core`. Because they resolve core's full dependency graph through those directives, a dependency change that shifts core's transitive versions (e.g. a Dependabot bump) leaves their `go.sum` stale. Run `just tidy` to reconcile all three modules after any such change.
 
-CI verifies this rather than trusting it: `test-and-lint` runs `go mod tidy -diff` per module, so a missed reconciliation fails the build instead of sitting latent.
+`just tidy` regenerates protobuf code first, as a prerequisite declared on the recipe rather than left to the caller. Generated code under `daemon/gen/` is not committed — absent on a fresh clone and after `just clean` — and `go mod tidy` cannot load the packages importing it, so without it the reconciliation fails outright rather than producing anything. See `.claude/rules/build-and-migrations.md` for the rule covering every target with that requirement.
+
+CI verifies this rather than trusting it: `test-and-lint` runs `go mod tidy -diff` per module — after `buf generate`, for the same reason — so a missed reconciliation fails the build instead of sitting latent.
 
 ## CI Notes
 

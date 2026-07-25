@@ -130,9 +130,10 @@ jobs:
       - name: Generate protobuf code
         run: buf generate
 
-      # Enforces the go.sum reconciliation CLAUDE.md documents as a manual `just tidy`
-      # step. Must run after buf generate: without daemon/gen, tidy prunes the gRPC and
-      # protobuf requirements and reports a spurious diff. Cheap, so it fails fast.
+      # Enforces the go.sum reconciliation the `just tidy` recipe performs locally.
+      # Must run after buf generate: without daemon/gen, tidy cannot load the packages
+      # importing it and fails outright — it looks for the missing package as an external
+      # module rather than pruning anything. Cheap, so it fails fast.
       - name: Verify go.mod/go.sum are tidy
         run: |
           go -C core mod tidy -diff
