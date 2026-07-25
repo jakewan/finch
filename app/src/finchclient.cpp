@@ -305,9 +305,14 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
     // Two distinct defects live here and only one is a missing key: a misspelled *key* is
     // absent, while a typo in a key's *value* expression yields a present key holding an
     // invalid QVariant. The second is the dangerous one, because the conversions below turn it
-    // into a plausible value rather than an error — an unusable amount becomes 0, and a bad
-    // isTransfer becomes false, which would persist an outbound transfer as ordinary income on
-    // its source account. So require each key to be present AND valid.
+    // into a plausible value rather than an error. So require each key to be present AND valid.
+    //
+    // Presence and validity are not the whole story, though: a *valid* variant of the wrong type
+    // still converts with a silent fallback. Where that fallback is harmless the daemon rejects
+    // it loudly (an empty account id, name, or start date; an unspecified frequency), and the
+    // checks below cover the two cases it would not catch. Note what is deliberately not checked:
+    // emptiness. An empty end date means open-ended and an empty destination means not-a-transfer,
+    // so rejecting empty or null values here would break the ordinary rule it is meant to protect.
     static const QStringList requiredKeys = {
         QStringLiteral("accountId"), QStringLiteral("name"),
         QStringLiteral("amount"), QStringLiteral("frequency"),
@@ -347,19 +352,47 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
         return;
     }
 
+    // The other two numeric fields get the same conversion-integrity check the amount does.
+    // Their *range* is deliberately left to the daemon, which already rejects an unspecified or
+    // out-of-range frequency and an out-of-range day-of-month with a specific message — this
+    // guard is about a value that could not be read at all, not about domain validity.
+    bool frequencyOk = false;
+    const int frequency = params.value(QStringLiteral("frequency")).toInt(&frequencyOk);
+    bool dayOfMonthOk = false;
+    const int dayOfMonth = params.value(QStringLiteral("dayOfMonth")).toInt(&dayOfMonthOk);
+    if (!frequencyOk || !dayOfMonthOk) {
+        emit recurringRuleCreateFailed(
+            QStringLiteral("Internal error: rule request carried an unreadable "
+                           "frequency or day-of-month."));
+        return;
+    }
+
+    // The transfer flag and the destination are one fact expressed twice, and the caller derives
+    // the flag *from* the destination — so they must agree. Checking the invariant rather than
+    // the flag's type catches the one silently-corrupting case here no matter its cause: a flag
+    // that reads false while a destination is set persists an outbound transfer as ordinary
+    // income on its source account, with a phantom destination stored alongside it. A type
+    // assertion would catch only the wrong-type spelling of that mistake; this catches a wrong
+    // property, a stale expression, and an inverted condition too.
+    const bool isTransfer = params.value(QStringLiteral("isTransfer")).toBool();
+    const QString transferTarget =
+        params.value(QStringLiteral("transferTargetAccountId")).toString();
+    if (isTransfer != !transferTarget.isEmpty()) {
+        emit recurringRuleCreateFailed(
+            QStringLiteral("Internal error: rule request's transfer flag and destination "
+                           "disagree."));
+        return;
+    }
+
     m_createRecurringRuleInProgress = true;
     emit createRecurringRuleInProgressChanged();
 
     auto stub = m_stub.get();
     std::string accountIdStr = params.value(QStringLiteral("accountId")).toString().toStdString();
     std::string nameStr = params.value(QStringLiteral("name")).toString().toStdString();
-    int frequency = params.value(QStringLiteral("frequency")).toInt();
     std::string startDateStr = params.value(QStringLiteral("startDate")).toString().toStdString();
     std::string endDateStr = params.value(QStringLiteral("endDate")).toString().toStdString();
-    int dayOfMonth = params.value(QStringLiteral("dayOfMonth")).toInt();
-    bool isTransfer = params.value(QStringLiteral("isTransfer")).toBool();
-    std::string transferTargetStr =
-        params.value(QStringLiteral("transferTargetAccountId")).toString().toStdString();
+    std::string transferTargetStr = transferTarget.toStdString();
     QList<int> semiDays;
     for (const auto& d : params.value(QStringLiteral("semiMonthlyDays")).toList())
         semiDays.append(d.toInt());
