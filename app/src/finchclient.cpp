@@ -23,8 +23,9 @@ static constexpr int kMinConnectingMs = 300;
 //
 // Returns the list rather than emitting, because the callers differ in exactly the two ways a
 // shared helper cannot absorb: which failure signal carries the message, and how the message names
-// the request. Emptiness is not checked here — each caller has its own legitimately-empty fields
-// (an open-ended end date, a not-a-transfer destination, an absent description).
+// the request. Emptiness is not checked here — each caller has its own fields that are legitimately
+// empty while still required to be present (an open-ended end date, a not-a-transfer destination, a
+// description the user left blank).
 static QString missingOrUnreadableKeys(const QVariantMap& params, const QStringList& required)
 {
     QStringList badKeys;
