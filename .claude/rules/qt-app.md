@@ -22,7 +22,25 @@ Qt Quick Controls types mark many properties as FINAL. NEVER declare custom prop
 
 A form ComboBox that submits a proto enum value must read `currentValue` (via `valueRole`), never `currentIndex`. The two coincide — and hide the bug — when a sentinel row sits at index 0 over a contiguous `1..N` enum: the row index then equals the enum value at every row, so a spec asserting the submitted value passes even if the code wrongly submits `currentIndex`.
 
-To keep the value-vs-index distinction testable, prefer the account-selector pattern — `currentIndex: -1` with a placeholder `displayText` and no sentinel row — so a row's index is one less than its enum value. A spec that then asserts the submitted enum value genuinely catches a `currentIndex`-for-`currentValue` bug. Reserve the sentinel-row form for models whose values aren't a contiguous run from 1.
+To keep the value-vs-index distinction testable, prefer the account-selector pattern — `currentIndex: -1` with a placeholder `displayText` and no sentinel row — so a row's index is one less than its enum value. A spec that then asserts the submitted enum value genuinely catches a `currentIndex`-for-`currentValue` bug.
+
+Use the sentinel-row form when "none" must be **re-selectable**: a form that persists across navigation needs it, because with only a placeholder at `currentIndex: -1` a mis-click into a real row cannot be undone without submitting or restarting the app. Values that aren't a contiguous run from 1 are a secondary reason to reach for it. Either way, when the model is also a filtered view of a source list, see § *Sentinel-Prefixed Filtered Models* — the sentinel there introduces an offset coincidence distinct from the index-equals-value one above.
+
+## Sentinel-Prefixed Filtered Models: Catching an Index-for-Value Read
+
+A ComboBox whose model prepends a sentinel row to a source list with one element filtered out — the "none of these" shape, such as a transfer-destination picker that excludes the source account — submits an identity rather than an enum. The bug to catch is a row's `currentIndex` used to look up the *unfiltered* source list — `source[currentIndex]` — where `currentValue` was wanted: the index belongs to the filtered model, so the lookup yields a real but wrong identity.
+
+**Assert that the sentinel row submits no identity.** That catches the bug whichever element the fixture filters out: at the sentinel the correct read yields the empty value while an unfiltered-source index read yields the first element's identity, so the two always differ. This is the cheap, fixture-independent guard — and a spec covering the "none selected" case already carries it if it asserts the submitted identity is empty.
+
+If you also assert on a **real** row, the fixture decides whether that assertion can fail. Assuming that read, and the filtered-out element sitting at source index *s*, real row *i* holds source element `i-1` when `i-1 < s` and element `i` otherwise, while the buggy read returns element `i` throughout — so the two coincide wherever `i > s`:
+
+- **Filter out the last element** and every real row diverges.
+- Filter out the **first** and no real row diverges, so an assertion there cannot fail whichever real row it drives.
+- Filter out a middle element and rows 1 through *s* inclusive diverge, none above. With three source elements and the middle one filtered out that means row 1 only, and an assertion on the last row proves nothing.
+
+Prefer the last-element fixture over re-deriving this. Only where the scenario fixes the filtered-out element's position, tabulate row → identity for the correct read and for the read you suspect, then assert where they differ.
+
+A wrong identity is silently acceptable only when it lands on some *other* account: this project's daemon and core both reject a transfer whose destination equals its source, so a buggy read returning the filtered-out element surfaces as `InvalidArgument` rather than a bad rule.
 
 ## QML Numeric Property Width
 

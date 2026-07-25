@@ -17,12 +17,11 @@ TestCase {
     readonly property int idxSemiMonthly: 2
     readonly property int idxMonthly: 3
 
-    // Three accounts, and the transfer specs deliberately source from the MIDDLE one. With a
-    // sentinel row at index 0 and the source filtered out, a source at index 0 makes the
-    // sentinel's +1 shift cancel the filter's -1 shift exactly — filtered row i would then be
-    // accounts[i] at every row, and a spec asserting the submitted id could not tell a correct
-    // currentValue read from an accounts[currentIndex] lookup. Sourcing from a2 breaks that
-    // coincidence: filtered row 1 is a1, while accounts[1] is a2.
+    // Three accounts, with the transfer specs sourcing from the MIDDLE one so that filtered row
+    // 1 diverges from an unfiltered-index read (row 1 is a1, accounts[1] is a2). Only row 1
+    // diverges under this fixture — see "Sentinel-Prefixed Filtered Models" in
+    // .claude/rules/qt-app.md for why, and for the sentinel-row assertion that holds
+    // regardless of fixture.
     readonly property var sampleAccounts: [
         { id: "a1", name: "Checking" },
         { id: "a2", name: "Savings" },
