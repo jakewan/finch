@@ -75,3 +75,18 @@ Automated tests: `just test-app` configures, builds, and runs the Qt Quick Test 
 - **Offscreen assertions.** A control's `visible`/`enabled` getter returns *effective* state — false when an ancestor is hidden/disabled or the item is not on a shown window — so under `offscreen` it reads false even when the local binding is true. NEVER assert on a component's `visible`/`enabled` (directly or via a property alias to one); the assertion is unreliable in the harness. Instead expose the underlying condition as a logical `readonly property bool` and assert that, binding the visual `visible`/`enabled` to the same property (e.g. `TransactionsPanel`'s `stateMessageVisible`).
 
 Manual testing requires a running daemon with seed data. The daemon must be built and started separately (`just build-daemon && daemon/finch-daemon`).
+
+**Check which daemon build you are actually talking to before trusting a manual result.** The app and the daemon are separate binaries with separate release paths, so a freshly built app routinely talks to a much older daemon — most easily when the daemon runs as the installed systemd user service rather than from the build directory. Any app behavior that depends on a daemon-side or core-side change then fails for a reason that has nothing to do with the app change under test, and it fails looking exactly like an app bug.
+
+Two things make this quieter than it sounds:
+
+- `just install-service` ends in `systemctl --user enable --now`, which starts an inactive service but does **not** restart an active one. Combined with the recipe's deliberate cp+mv (which lets the install succeed while the old binary runs, since the running process keeps its file descriptor to the replaced inode), a service that was already up keeps serving the **previous** build after a successful-looking install. Restart it explicitly:
+
+    ```bash
+    just install-service
+    systemctl --user restart finch.service
+    ```
+
+- The unit is named `finch.service`, not `finch-daemon` — so a status check on the latter reports "inactive" for a daemon that is running fine.
+
+Compare the installed binary's timestamp against the commits the behavior under test depends on (`stat -c %y ~/.local/bin/finch-daemon`), and reinstall before concluding anything about the app.

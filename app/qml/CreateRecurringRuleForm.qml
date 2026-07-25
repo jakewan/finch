@@ -24,10 +24,69 @@ Item {
     property alias semiDay1Text: semiDay1Field.text
     property alias semiDay2Text: semiDay2Field.text
     property alias frequencyIndex: freqCombo.currentIndex
+    property alias transferTargetIndex: destCombo.currentIndex
     property alias errorText: errorLabel.text
-    // Amount, its sign, and the signed-cents derivation live in the shared SignedAmountField.
+    // Amount, its sign, and the cents derivations live in the shared SignedAmountField.
     property alias expense: amountInput.expense
+    readonly property string previewText: amountInput.previewText
     readonly property var signedCents: amountInput.signedCents
+    readonly property var unsignedCents: amountInput.unsignedCents
+    // A transfer's direction is implied by its source/target pair, so there is no author-chosen
+    // sign to offer. Single source for both the child control and the specs, which assert this
+    // rather than an effective `visible` read (unreliable offscreen).
+    readonly property bool signSelectorVisible: !isTransfer
+    // Whether any other account exists to transfer to. A single-account database has none, and
+    // the control is pointless then.
+    readonly property bool transferAvailable: transferTargets.length > 1
+
+    // The destination list: a real "Not a transfer" row at index 0, then every account except
+    // the source. The sentinel is a selectable row rather than a placeholder so leaving
+    // transfer mode is possible — this form persists across navigation, so a placeholder-only
+    // control would make a mis-click unescapable without submitting or restarting the app.
+    //
+    // The source is absent from the list rather than validated against, so choosing an account
+    // as its own transfer target is unrepresentable. Empty while no source is chosen: the form
+    // is disabled then anyway, and offering a destination before a source has no meaning.
+    readonly property var transferTargets: {
+        var rows = [{ id: "", name: "Not a transfer" }]
+        if (accountId === "" || !client)
+            return rows
+        var all = client.accounts || []
+        for (var i = 0; i < all.length; i++) {
+            if (all[i].id !== accountId)
+                rows.push({ id: all[i].id, name: all[i].name })
+        }
+        return rows
+    }
+
+    // Transfer mode is derived from the selected row's *value*, never its index: the model is
+    // filtered, so an index into it does not index `client.accounts`. Reading currentValue also
+    // means a model swap cannot leave a stale id behind, so correctness here does not depend on
+    // a reset winning a race with the model's own re-evaluation.
+    readonly property string transferTargetId: destCombo.currentValue ? destCombo.currentValue : ""
+    readonly property bool isTransfer: transferTargetId !== ""
+
+    // Holds the author's Expense/Income choice while transfer mode overrides it, so leaving
+    // transfer mode restores it instead of silently discarding it.
+    property bool priorExpense: true
+
+    onIsTransferChanged: {
+        if (isTransfer) {
+            priorExpense = amountInput.expense
+            // A transfer debits its source, so the preview must read as a debit. Leaving
+            // `expense` untouched while hiding its control would show a green credit above a
+            // rule that takes money out — the wrong direction, stated at authoring time, with
+            // the explaining control removed.
+            amountInput.expense = true
+        } else {
+            amountInput.expense = priorExpense
+        }
+    }
+
+    // A destination held against the previous source's list is meaningless. Index 0 is always
+    // the sentinel, so this lands on "not a transfer" whichever order it and the model
+    // re-evaluation run in.
+    onAccountIdChanged: destCombo.currentIndex = 0
 
     // Frequency enum values (proto Frequency): Weekly=1 … Yearly=5. The ComboBox has no
     // sentinel row (currentIndex starts -1 with a placeholder), so a row's index is one less
@@ -79,9 +138,22 @@ Item {
         // frequency switch is never persisted.
         var dom = isMonthly ? dayOfMonthValue : 0
         var semis = isSemiMonthly ? [semiDay1Value, semiDay2Value] : []
-        client.createRecurringRule(accountId, nameField.text.trim(), signedCents,
-                                   freqCombo.currentValue, startDateField.text,
-                                   endDateField.text, dom, semis)
+        // A params object, not positional args: named fields make a transpose impossible, and
+        // the key names here are the contract the C++ side unpacks.
+        client.createRecurringRule({
+            accountId: accountId,
+            name: nameField.text.trim(),
+            // A transfer's amount is a positive magnitude — direction comes from the
+            // source/target pair, and the daemon rejects a non-positive one.
+            amount: isTransfer ? amountInput.unsignedCents : amountInput.signedCents,
+            frequency: freqCombo.currentValue,
+            startDate: startDateField.text,
+            endDate: endDateField.text,
+            dayOfMonth: dom,
+            semiMonthlyDays: semis,
+            isTransfer: isTransfer,
+            transferTargetAccountId: transferTargetId
+        })
     }
 
     Connections {
@@ -92,6 +164,8 @@ Item {
             dayOfMonthField.text = ""
             semiDay1Field.text = ""
             semiDay2Field.text = ""
+            // Back to "not a transfer", so a follow-up rule does not inherit transfer mode.
+            destCombo.currentIndex = 0
             errorLabel.text = ""
             form.created(id)
         }
@@ -113,10 +187,32 @@ Item {
             onTextChanged: errorLabel.text = ""
         }
 
+        // Seated above Amount because it decides what kind of rule this is, and that decision
+        // governs whether Amount carries an Expense/Income choice at all. Choosing the kind
+        // first keeps the sign toggle from vanishing under the author's cursor. Hidden when the
+        // account list offers no candidate destination (a single-account database).
+        Label {
+            text: "Transfer to"
+            visible: form.transferAvailable
+        }
+        ComboBox {
+            id: destCombo
+            Layout.fillWidth: true
+            visible: form.transferAvailable
+            model: form.transferTargets
+            textRole: "name"
+            // valueRole, so the form submits the row's account id. The model is filtered, so an
+            // index into it is not an index into client.accounts.
+            valueRole: "id"
+            currentIndex: 0
+            onCurrentIndexChanged: errorLabel.text = ""
+        }
+
         Label { text: "Amount" }
         SignedAmountField {
             id: amountInput
             Layout.fillWidth: true
+            signSelectorVisible: form.signSelectorVisible
             onEdited: errorLabel.text = ""
         }
 

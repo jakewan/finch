@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Qt app: create accounts through a UI form (previously only via MCP tools).
 - Qt app: view an account's individual transactions on the Transactions screen — pick an account, browse its transactions in a list, and select one to see its full details (previously only the aggregated balance chart was visible).
 - Qt app: record a manual transaction against an account from the Transactions screen — enter a name, amount, and Expense/Income, with a live signed-amount preview and the date defaulting to today (previously only via MCP tools).
-- Qt app: view and create an account's recurring rules on the Recurring Rules screen — pick an account, browse its rules, and add a new rule at any frequency (weekly, biweekly, semi-monthly, monthly, or yearly) with an Expense/Income amount and an optional end date (previously only via MCP tools).
+- Qt app: view and create an account's recurring rules on the Recurring Rules screen — pick an account, browse its rules, and add a new rule at any frequency (weekly, biweekly, semi-monthly, monthly, or yearly) with an optional end date (previously only via MCP tools). A rule is either an Expense/Income amount on the selected account or a recurring transfer to another account, picked from a "Transfer to" list. Transfer rules show as a debit on the account they leave, naming the destination.
 
 ### Changed
 
@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Monthly cash flow no longer counts a transfer as both income and an expense. Moving money between your own accounts is neither, so transfers are reported in a new `transfers` total instead of inflating income and expenses. Income plus expenses plus transfers equals the period's balance change, so a cash-flow report can still be reconciled against the balance chart — for a single-account view this means a transfer no longer changes that account's net cash flow, but the movement is still visible.
 - Projected transactions and recorded transactions now carry an `is_transfer` flag over gRPC and MCP, so a client can tell why a transfer appears in projected balances but not in cash-flow income.
 - Recurring transfer rules are validated on create and on amount changes: the destination must be an existing account other than the source, and the amount must be positive (direction comes from the source and destination pair). Invalid input returns `InvalidArgument` rather than `Internal`.
+- The Qt app now shows a recurring transfer rule as a debit on the account it leaves, naming the destination. Previously it displayed the rule's stored magnitude as a credit on the account being debited, with no indication of where the money went — affecting any transfer rule created through the MCP tools.
 
 ### Security
 

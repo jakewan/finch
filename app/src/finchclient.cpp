@@ -294,29 +294,111 @@ void FinchClient::recordTransaction(const QString& accountId, const QString& dat
     m_recordTransactionWatcher.setFuture(future);
 }
 
-void FinchClient::createRecurringRule(const QString& accountId, const QString& name,
-                                      qlonglong amount, int frequency,
-                                      const QString& startDate, const QString& endDate,
-                                      int dayOfMonth, const QVariantList& semiMonthlyDays)
+void FinchClient::createRecurringRule(const QVariantMap& params)
 {
     // Authoritative re-entrancy guard, mirroring createAccount/recordTransaction: the QML
     // submit-disable is cosmetic, so without this a rapid double-submit could create two rules.
     if (m_createRecurringRuleInProgress)
         return;
 
+    // A params object cannot transpose its arguments, but it trades that for a quieter hazard.
+    // Two distinct defects live here and only one is a missing key: a misspelled *key* is
+    // absent, while a typo in a key's *value* expression yields a present key holding an
+    // invalid QVariant. The second is the dangerous one, because the conversions below turn it
+    // into a plausible value rather than an error. So require each key to be present AND valid.
+    //
+    // Presence and validity are not the whole story, though: a *valid* variant of the wrong type
+    // still converts with a silent fallback. Where that fallback is harmless the daemon rejects
+    // it loudly (an empty account id, name, or start date; an unspecified frequency), and the
+    // checks below cover the two cases it would not catch. Note what is deliberately not checked:
+    // emptiness. An empty end date means open-ended and an empty destination means not-a-transfer,
+    // so rejecting empty or null values here would break the ordinary rule it is meant to protect.
+    static const QStringList requiredKeys = {
+        QStringLiteral("accountId"), QStringLiteral("name"),
+        QStringLiteral("amount"), QStringLiteral("frequency"),
+        QStringLiteral("startDate"), QStringLiteral("endDate"),
+        QStringLiteral("dayOfMonth"), QStringLiteral("semiMonthlyDays"),
+        QStringLiteral("isTransfer"), QStringLiteral("transferTargetAccountId")
+    };
+    QStringList badKeys;
+    for (const QString& key : requiredKeys) {
+        if (!params.contains(key) || !params.value(key).isValid())
+            badKeys.append(key);
+    }
+    if (!badKeys.isEmpty()) {
+        emit recurringRuleCreateFailed(
+            QStringLiteral("Internal error: rule request missing or unreadable: %1.")
+                .arg(badKeys.join(QStringLiteral(", "))));
+        return;
+    }
+
+    // The amount is the one field whose conversion can fail on an in-range-looking input: a
+    // magnitude past a double's exact-integer ceiling does not fit an int64 and converts to 0.
+    // Neither the daemon nor core validates a non-transfer amount, so a 0 would persist as a
+    // rule that silently projects nothing.
+    bool amountOk = false;
+    const qlonglong amount = params.value(QStringLiteral("amount")).toLongLong(&amountOk);
+    if (!amountOk) {
+        // Reachable from the UI: the magnitude field caps neither digits nor scale.
+        emit recurringRuleCreateFailed(
+            QStringLiteral("That amount is too large. Please enter a smaller amount."));
+        return;
+    }
+    if (amount == 0) {
+        // Not reachable from the UI — the form requires a magnitude above zero — so a zero here
+        // means the caller built the request wrong rather than the user mistyping.
+        emit recurringRuleCreateFailed(
+            QStringLiteral("Internal error: rule request carried a zero amount."));
+        return;
+    }
+
+    // The other two numeric fields get the same conversion-integrity check the amount does.
+    // Their *range* is deliberately left to the daemon, which already rejects an unspecified or
+    // out-of-range frequency and an out-of-range day-of-month with a specific message — this
+    // guard is about a value that could not be read at all, not about domain validity.
+    bool frequencyOk = false;
+    const int frequency = params.value(QStringLiteral("frequency")).toInt(&frequencyOk);
+    bool dayOfMonthOk = false;
+    const int dayOfMonth = params.value(QStringLiteral("dayOfMonth")).toInt(&dayOfMonthOk);
+    if (!frequencyOk || !dayOfMonthOk) {
+        emit recurringRuleCreateFailed(
+            QStringLiteral("Internal error: rule request carried an unreadable "
+                           "frequency or day-of-month."));
+        return;
+    }
+
+    // The transfer flag and the destination are one fact expressed twice, and the caller derives
+    // the flag *from* the destination — so they must agree. Checking the invariant rather than
+    // the flag's type catches the one silently-corrupting case here no matter its cause: a flag
+    // that reads false while a destination is set persists an outbound transfer as ordinary
+    // income on its source account, with a phantom destination stored alongside it. A type
+    // assertion would catch only the wrong-type spelling of that mistake; this catches a wrong
+    // property, a stale expression, and an inverted condition too.
+    const bool isTransfer = params.value(QStringLiteral("isTransfer")).toBool();
+    const QString transferTarget =
+        params.value(QStringLiteral("transferTargetAccountId")).toString();
+    if (isTransfer != !transferTarget.isEmpty()) {
+        emit recurringRuleCreateFailed(
+            QStringLiteral("Internal error: rule request's transfer flag and destination "
+                           "disagree."));
+        return;
+    }
+
     m_createRecurringRuleInProgress = true;
     emit createRecurringRuleInProgressChanged();
 
     auto stub = m_stub.get();
-    std::string accountIdStr = accountId.toStdString();
-    std::string nameStr = name.toStdString();
-    std::string startDateStr = startDate.toStdString();
-    std::string endDateStr = endDate.toStdString();
+    std::string accountIdStr = params.value(QStringLiteral("accountId")).toString().toStdString();
+    std::string nameStr = params.value(QStringLiteral("name")).toString().toStdString();
+    std::string startDateStr = params.value(QStringLiteral("startDate")).toString().toStdString();
+    std::string endDateStr = params.value(QStringLiteral("endDate")).toString().toStdString();
+    std::string transferTargetStr = transferTarget.toStdString();
     QList<int> semiDays;
-    for (const auto& d : semiMonthlyDays)
+    for (const auto& d : params.value(QStringLiteral("semiMonthlyDays")).toList())
         semiDays.append(d.toInt());
     auto future = QtConcurrent::run([stub, accountIdStr, nameStr, amount, frequency,
-                                     startDateStr, endDateStr, dayOfMonth,
+                                     startDateStr, endDateStr, dayOfMonth, isTransfer,
+                                     transferTargetStr,
                                      semiDays]() -> CreateRecurringRuleResult {
         grpc::ClientContext context;
         context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
@@ -331,8 +413,12 @@ void FinchClient::createRecurringRule(const QString& accountId, const QString& n
         request.set_day_of_month(dayOfMonth);
         for (int d : semiDays)
             request.add_semi_monthly_days(d);
-        // Transfers are a distinct create mode not yet exposed in the UI.
-        request.set_is_transfer(false);
+        // A transfer's amount is a positive magnitude and its direction comes from the
+        // source/target pair, so the form sends the unsigned value and the daemon rejects a
+        // non-positive one. Both fields go together: the daemon requires a target whenever
+        // is_transfer is set.
+        request.set_is_transfer(isTransfer);
+        request.set_transfer_target_account_id(transferTargetStr);
 
         finch::v1::CreateRecurringRuleResponse response;
         grpc::Status grpcStatus = stub->CreateRecurringRule(&context, request, &response);
@@ -410,7 +496,9 @@ void FinchClient::startRecurringRulesFetch()
             entry["id"] = QString::fromStdString(rule.id());
             entry["accountId"] = QString::fromStdString(rule.account_id());
             entry["name"] = QString::fromStdString(rule.name());
-            // Signed cents; the panel formats and applies the sign.
+            // Signed cents for an ordinary rule, but a POSITIVE magnitude for a transfer, whose
+            // direction comes from the source/target pair rather than the stored sign — see
+            // ruleAmount in txformat.js, which mirrors core's effectOn.
             entry["amount"] = static_cast<qlonglong>(rule.amount());
             // Raw Frequency int; the panel maps it to a human label.
             entry["frequency"] = static_cast<int>(rule.frequency());

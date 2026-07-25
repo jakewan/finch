@@ -52,7 +52,50 @@ Item {
     property alias detailEndDateText: detailEndDate.text
     property alias detailScheduleText: detailSchedule.text
     property alias detailStatusText: detailStatus.text
+    property alias detailTransferText: detailTransfer.text
     property alias createForm: createRuleForm
+
+    // Whether the selected rule moves money to another account, and so has a direction to
+    // explain. A logical property, not an alias to a Label's visible (unreliable offscreen).
+    // Keyed on the side test, not merely on being a transfer: a rule touching neither side would
+    // otherwise show the row with nothing in it.
+    readonly property bool detailTransferVisible:
+        TxFormat.transferDirection(selectedRule, currentAccountId) !== ""
+
+    // An account's display name, falling back to its raw id. Never returns undefined: a miss
+    // would otherwise be concatenated into a row label sitting beside a money amount.
+    function accountName(id) {
+        for (var i = 0; i < accounts.length; i++) {
+            if (accounts[i].id === id)
+                return accounts[i].name
+        }
+        return id
+    }
+
+    // The master row's name cell, annotated with a transfer's destination and a paused flag.
+    // Called by the delegate, so it is the shipping composition a spec can assert directly.
+    function rowLabel(rule) {
+        if (!rule)
+            return ""
+        var label = rule.name
+        var direction = TxFormat.transferDirection(rule, currentAccountId)
+        if (direction === "out")
+            label += " → " + accountName(rule.transferTargetAccountId)
+        else if (direction === "in")
+            label += " ← " + accountName(rule.accountId)
+        if (rule.paused)
+            label += " (paused)"
+        return label
+    }
+
+    // A rule's amount as it applies to the account being viewed — a transfer's stored magnitude
+    // is direction-less, so rendering it raw would show an outbound transfer as a credit on the
+    // account it debits. Shared by the master row and the detail pane.
+    function ruleAmountText(rule) {
+        if (!rule)
+            return ""
+        return TxFormat.formatAmount(TxFormat.ruleAmount(rule, currentAccountId))
+    }
 
     // Human-readable schedule for a rule's frequency-conditional day fields.
     function scheduleText(rule) {
@@ -150,12 +193,10 @@ Item {
                         Label {
                             Layout.fillWidth: true
                             elide: Text.ElideRight
-                            text: row.modelData.paused
-                                  ? row.modelData.name + " (paused)"
-                                  : row.modelData.name
+                            text: panel.rowLabel(row.modelData)
                         }
                         Label { text: TxFormat.frequencyLabel(row.modelData.frequency) }
-                        Label { text: TxFormat.formatAmount(row.modelData.amount) }
+                        Label { text: panel.ruleAmountText(row.modelData) }
                     }
                 }
             }
@@ -185,7 +226,29 @@ Item {
                     Label { text: "Amount"; font.bold: true }
                     Label {
                         id: detailAmount
-                        text: panel.selectedRule ? TxFormat.formatAmount(panel.selectedRule.amount) : ""
+                        text: panel.ruleAmountText(panel.selectedRule)
+                    }
+
+                    // Names the direction in words, not just by the amount's sign. Repricing a
+                    // rule from this pane works on the stored magnitude, so a bare "-$500.00"
+                    // would imply a negative stored value the backend rejects.
+                    Label {
+                        text: "Transfer"
+                        font.bold: true
+                        visible: panel.detailTransferVisible
+                    }
+                    Label {
+                        id: detailTransfer
+                        visible: panel.detailTransferVisible
+                        text: {
+                            var direction =
+                                TxFormat.transferDirection(panel.selectedRule, panel.currentAccountId)
+                            if (direction === "out")
+                                return "Out to " + panel.accountName(panel.selectedRule.transferTargetAccountId)
+                            if (direction === "in")
+                                return "In from " + panel.accountName(panel.selectedRule.accountId)
+                            return ""
+                        }
                     }
 
                     Label { text: "Frequency"; font.bold: true }
