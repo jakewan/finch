@@ -22,7 +22,21 @@ Qt Quick Controls types mark many properties as FINAL. NEVER declare custom prop
 
 A form ComboBox that submits a proto enum value must read `currentValue` (via `valueRole`), never `currentIndex`. The two coincide — and hide the bug — when a sentinel row sits at index 0 over a contiguous `1..N` enum: the row index then equals the enum value at every row, so a spec asserting the submitted value passes even if the code wrongly submits `currentIndex`.
 
-To keep the value-vs-index distinction testable, prefer the account-selector pattern — `currentIndex: -1` with a placeholder `displayText` and no sentinel row — so a row's index is one less than its enum value. A spec that then asserts the submitted enum value genuinely catches a `currentIndex`-for-`currentValue` bug. Reserve the sentinel-row form for models whose values aren't a contiguous run from 1.
+To keep the value-vs-index distinction testable, prefer the account-selector pattern — `currentIndex: -1` with a placeholder `displayText` and no sentinel row — so a row's index is one less than its enum value. A spec that then asserts the submitted enum value genuinely catches a `currentIndex`-for-`currentValue` bug. Reserve the sentinel-row form for models whose values aren't a contiguous run from 1 — and when such a model is also a filtered view of a source list, read the next section first: there the sentinel introduces a second coincidence of its own.
+
+## Sentinel-Prefixed Filtered Models: Index Arithmetic and Fixture Choice
+
+A ComboBox whose model is a source list with one element filtered out and a sentinel row prepended — the "none of these" shape, such as a transfer-destination picker that excludes the source account — submits an identity rather than an enum. Reading `currentIndex` instead of `currentValue` here indexes the *unfiltered* source list, so it yields a real but wrong identity, which a server accepts without complaint.
+
+Whether a spec can catch that depends entirely on which element the fixture filters out. The sentinel occupies row 0, so real rows start at 1. With the filtered-out element at source index *s*, filtered row *i* is source element `i-1` when `i-1 < s` and source element `i` otherwise, while the buggy read returns source element `i` at every row. The two coincide wherever `i > s`:
+
+- **Filter out the last element.** No row satisfies `i > s`, so every row diverges and the fixture cannot hide the bug.
+- Filtering out the **first** element is the worst case — every row coincides, so no assertion on the submitted identity can fail, whichever rows the spec drives.
+- Filtering out a middle element diverges only at rows up to *s*, so the spec must assert on one of those; an assertion on the last row proves nothing.
+
+Pick the fixture by that rule rather than re-deriving it each time. Where the scenario fixes the filtered-out element's position, tabulate row → identity for both the correct and the buggy read, and assert on a row where they differ.
+
+The sentinel row is a UX requirement, not a testing one: it is what makes "none" re-selectable. A form that persists across navigation needs that — with only a placeholder at `currentIndex: -1`, a mis-click into a real row cannot be undone without submitting or restarting the app.
 
 ## QML Numeric Property Width
 
