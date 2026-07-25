@@ -8,7 +8,7 @@ just all      # Build everything
 just test     # Run all tests
 just lint     # Run linters
 just proto    # Regenerate protobuf code
-just vuln     # Scan Go modules for known vulnerabilities (needs `just proto` first)
+just vuln     # Scan Go modules for known vulnerabilities
 ```
 
 ## Architecture
