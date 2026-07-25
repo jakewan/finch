@@ -3,7 +3,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "txformat.js" as TxFormat
 
-// Shared signed-amount input: a magnitude field whose validator forbids a sign, an
+// Shared signed-amount input: a magnitude field whose accepted shape is enforced by one pattern at
+// both the keystroke validator and the submit predicate (so it forbids a sign either way), an
 // Expense/Income toggle as the sole sign source, and a live signed-amount preview. Extracted
 // from the transaction and recurring-rule forms so the 64-bit-overflow-safe cents handling
 // lives in one place. The host reads `signedCents`/`amountValid` and reacts to `edited()`.
@@ -46,7 +47,8 @@ Item {
     // parseFloat reads the magnitude locale-cleanly because the pattern above forbids a sign and
     // a comma decimal. NaN when blank or non-numeric.
     readonly property real magnitude: parseFloat(amountField.text)
-    // Reject 0: a $0 entry is meaningless, and neither the daemon nor core validates amount. No
+    // Reject 0: a $0 entry is meaningless, and nothing below this control validates a non-transfer
+    // amount (a transfer's is checked by both the daemon and core, but that is the narrower case). No
     // separate isNaN check — NaN > 0 is false — and no separate magnitude bound, because the
     // pattern's digit cap *is* the bound. Two numeric bounds would be two different limits
     // wearing one name.

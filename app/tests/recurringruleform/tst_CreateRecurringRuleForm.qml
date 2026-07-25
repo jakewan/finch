@@ -137,6 +137,9 @@ TestCase {
         ctx.form.nameText = "Gym"
         ctx.form.frequencyIndex = idxWeekly
         ctx.form.amountText = data.text
+        // Pins the premise the whole guard rests on — see the transaction form's spec for why the
+        // assertions below would otherwise hold even if the write had silently failed.
+        compare(ctx.form.amountText, data.text)
         compare(ctx.form.canSubmit, false)
         compare(ctx.form.signedCents, 0)
         compare(ctx.form.previewText, "")
@@ -236,6 +239,7 @@ TestCase {
         ctx.form.nameText = "Too much"
         ctx.form.amountText = "1000000000000"
         ctx.form.frequencyIndex = idxWeekly
+        compare(ctx.form.amountText, "1000000000000") // the write lands; the predicate refuses it
         compare(ctx.form.canSubmit, false)
         compare(ctx.form.signedCents, 0)
         ctx.form.submit()

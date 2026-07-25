@@ -386,8 +386,8 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
         return;
     }
 
-    // The amount is the one field whose conversion can fail on an in-range-looking input: a
-    // magnitude past a double's exact-integer ceiling does not fit an int64 and converts to 0.
+    // The amount is the one field whose conversion can fail on an input that still looks numeric —
+    // an Infinity, or a magnitude outside int64 — and a failed conversion yields 0.
     // Neither the daemon nor core validates a non-transfer amount, so a 0 would persist as a
     // rule that silently projects nothing.
     bool amountOk = false;

@@ -123,6 +123,10 @@ TestCase {
         var ctx = build({ accountId: "a1" })
         ctx.form.nameText = "Coffee"
         ctx.form.amountText = data.text
+        // Pins the premise the whole guard rests on: the write LANDS, bypassing the keystroke
+        // validator. Without this, all four assertions below would also hold if the write had
+        // silently failed — passing for a reason other than the one they name.
+        compare(ctx.form.amountText, data.text)
         compare(ctx.form.canSubmit, false)
         compare(ctx.form.signedCents, 0)
         compare(ctx.form.previewText, "")
@@ -132,8 +136,8 @@ TestCase {
 
     // submit() sends signed cents, trimmed name, the date, description, status Reconciled (3),
     // and the injected accountId. lastRecordName and lastRecordDescription are asserted
-    // INDEPENDENTLY — a 6-arg positional Q_INVOKABLE with two adjacent strings is a transpose
-    // waiting to happen, and only separate assertions catch a name<->description swap.
+    // INDEPENDENTLY: the params object removes the positional-transpose hazard, but separate
+    // assertions are still what catch a name<->description swap in how the keys are populated.
     function test_submitSendsExpenseAsNegativeCents() {
         var ctx = build({ accountId: "a1" })
         ctx.form.nameText = "  Coffee  "
@@ -216,6 +220,7 @@ TestCase {
         var ctx = build({ accountId: "a1" })
         ctx.form.nameText = "Too much"
         ctx.form.amountText = "1000000000000"
+        compare(ctx.form.amountText, "1000000000000") // the write lands; the predicate refuses it
         compare(ctx.form.canSubmit, false)
         compare(ctx.form.signedCents, 0)
         ctx.form.submit()
