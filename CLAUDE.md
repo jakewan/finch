@@ -42,7 +42,9 @@ just test-mcp     # MCP server only
 
 The daemon and mcp modules depend on core via `replace` directives pointing to `../core`. Because they resolve core's full dependency graph through those directives, a dependency change that shifts core's transitive versions (e.g. a Dependabot bump) leaves their `go.sum` stale. Run `just tidy` to reconcile all three modules after any such change.
 
-CI verifies this rather than trusting it: `test-and-lint` runs `go mod tidy -diff` per module, so a missed reconciliation fails the build instead of sitting latent.
+Run `just proto` before `just tidy`. Generated code under `daemon/gen/` is not committed, so on a clean tree it does not exist yet — and without it `go mod tidy` prunes the gRPC and protobuf requirements. On a dependency change that means the reconciliation step quietly deletes the requirement being changed.
+
+CI verifies both of these rather than trusting them: `test-and-lint` runs `go mod tidy -diff` per module, and does so *after* `buf generate` for the same reason. A missed reconciliation fails the build instead of sitting latent, and a tidy run that preceded generation is caught the same way — the committed `go.mod` arrives with the requirement stripped, so the diff reports it as missing.
 
 ## CI Notes
 

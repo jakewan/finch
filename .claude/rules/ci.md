@@ -22,6 +22,10 @@ It needs generated proto code, so run `just proto` first.
 
 `govulncheck` fails only on advisories it can **statically reach** from finch's own code. A scan reports a silent tail of advisories in imported packages and required modules that never surface, and static reachability is defeated by reflection and interface dispatch. So a green scan means "no reachable advisory," not "no known-vulnerable dependency." The broader question — is any dependency in the graph known-vulnerable at all — is answered by Dependabot alerts, which cover the full transitive closure but cannot tell you whether the code is reachable. The two are complements; neither alone is coverage.
 
+So when scoping a dependency bump, read both surfaces rather than whichever one raised the alarm. `govulncheck -C <module> -scan module` lists every advisory affecting a module in the graph with no reachability filtering, which is what surfaces the two blind spots. Note the flag shape: module mode accepts no package pattern, so a trailing `./...` is rejected.
+
+Each surface can be the only one that sees a given advisory. A Dependabot alert names **one** advisory, and its stated fix version clears that advisory rather than the package — an unalerted sibling in the same package can need a higher version. Going the other way, an advisory with no Go vulnerability database entry is invisible to `govulncheck` in every mode, and Dependabot is the only place it appears. A bump scoped from one surface alone closes some of what it looks like it closed.
+
 The scan covers Go modules only. The Qt app's C++ dependencies (gRPC and protobuf from apt, Qt from the install action) are covered by neither mechanism.
 
 ### When an advisory has no available fix
