@@ -19,8 +19,9 @@ TestCase {
 
     // Three accounts, with the transfer specs sourcing from the MIDDLE one so that filtered row
     // 1 diverges from an unfiltered-index read (row 1 is a1, accounts[1] is a2). Only row 1
-    // diverges under this fixture — see the sentinel-prefixed-filtered-model section of the Qt
-    // app rule for why, and for the sentinel-row assertion that holds regardless of fixture.
+    // diverges under this fixture — see "Sentinel-Prefixed Filtered Models" in
+    // .claude/rules/qt-app.md for why, and for the sentinel-row assertion that holds
+    // regardless of fixture.
     readonly property var sampleAccounts: [
         { id: "a1", name: "Checking" },
         { id: "a2", name: "Savings" },

@@ -28,11 +28,11 @@ Use the sentinel-row form when "none" must be **re-selectable**: a form that per
 
 ## Sentinel-Prefixed Filtered Models: Catching an Index-for-Value Read
 
-A ComboBox whose model prepends a sentinel row to a source list with one element filtered out — the "none of these" shape, such as a transfer-destination picker that excludes the source account — submits an identity rather than an enum. Reading `currentIndex` instead of `currentValue` here indexes the *unfiltered* source list, yielding a real but wrong identity.
+A ComboBox whose model prepends a sentinel row to a source list with one element filtered out — the "none of these" shape, such as a transfer-destination picker that excludes the source account — submits an identity rather than an enum. The bug to catch is a row's `currentIndex` used to look up the *unfiltered* source list — `source[currentIndex]` — where `currentValue` was wanted: the index belongs to the filtered model, so the lookup yields a real but wrong identity.
 
 **Assert that the sentinel row submits no identity.** That catches the bug whichever element the fixture filters out: at the sentinel the correct read yields the empty value while an unfiltered-source index read yields the first element's identity, so the two always differ. This is the cheap, fixture-independent guard — and a spec covering the "none selected" case already carries it if it asserts the submitted identity is empty.
 
-If you also assert on a **real** row, the fixture decides whether that assertion can fail. Taking the buggy read to be `source[currentIndex]`, and the filtered-out element to sit at source index *s*, real row *i* holds source element `i-1` when `i-1 < s` and element `i` otherwise, while the buggy read returns element `i` throughout — so the two coincide wherever `i > s`:
+If you also assert on a **real** row, the fixture decides whether that assertion can fail. Assuming that read, and the filtered-out element sitting at source index *s*, real row *i* holds source element `i-1` when `i-1 < s` and element `i` otherwise, while the buggy read returns element `i` throughout — so the two coincide wherever `i > s`:
 
 - **Filter out the last element** and every real row diverges.
 - Filter out the **first** and no real row diverges, so an assertion there cannot fail whichever real row it drives.
