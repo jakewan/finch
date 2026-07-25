@@ -120,6 +120,33 @@ TestCase {
         compare(ctx.form.canSubmit, false)
     }
 
+    // Symmetric with the transaction form's set: the amount control is shared, so a shape it
+    // wrongly accepts is wrong on both screens. See that suite for why a property write reaches
+    // past the keystroke validator.
+    function test_rejectsAmountShapesItCannotCarry_data() {
+        return [
+            { tag: "three decimals", text: "12.345" },
+            { tag: "exponent overflowing to Infinity", text: "1e400" },
+            { tag: "modest exponent", text: "1e3" },
+            { tag: "trailing garbage", text: "12.34abc" }
+        ]
+    }
+
+    function test_rejectsAmountShapesItCannotCarry(data) {
+        var ctx = build({ accountId: "a1" })
+        ctx.form.nameText = "Gym"
+        ctx.form.frequencyIndex = idxWeekly
+        ctx.form.amountText = data.text
+        // Pins the premise the whole guard rests on — see the transaction form's spec for why the
+        // assertions below would otherwise hold even if the write had silently failed.
+        compare(ctx.form.amountText, data.text)
+        compare(ctx.form.canSubmit, false)
+        compare(ctx.form.signedCents, 0)
+        compare(ctx.form.previewText, "")
+        ctx.form.submit()
+        compare(ctx.mock.createRecurringRuleCallCount, 0)
+    }
+
     // A weekly rule sends signed cents, the trimmed name, the account, frequency value 1, the
     // start date, an empty end date, day-of-month 0, no semi-monthly days, and — with no
     // destination chosen — no transfer. Each field is asserted independently.
@@ -190,6 +217,33 @@ TestCase {
         compare(ctx.form.signedCents, -3000000000)
         ctx.form.submit()
         compare(ctx.mock.lastCreateAmount, -3000000000)
+    }
+
+    // The largest amount the control accepts — 12 integer digits — submits exactly, keeping
+    // cents well under 2^53 where a JS number stops representing integers faithfully.
+    function test_amountAtCapSubmitsExactCents() {
+        var ctx = build({ accountId: "a1" })
+        ctx.form.nameText = "Portfolio"
+        ctx.form.amountText = "999999999999.99"
+        ctx.form.expense = true
+        ctx.form.frequencyIndex = idxWeekly
+        compare(ctx.form.signedCents, -99999999999999)
+        ctx.form.submit()
+        compare(ctx.mock.lastCreateAmount, -99999999999999)
+    }
+
+    // One integer digit past the cap, set programmatically since the keystroke validator refuses
+    // the 13th digit — which is why the predicate must refuse it independently.
+    function test_amountPastCapIsRefused() {
+        var ctx = build({ accountId: "a1" })
+        ctx.form.nameText = "Too much"
+        ctx.form.amountText = "1000000000000"
+        ctx.form.frequencyIndex = idxWeekly
+        compare(ctx.form.amountText, "1000000000000") // the write lands; the predicate refuses it
+        compare(ctx.form.canSubmit, false)
+        compare(ctx.form.signedCents, 0)
+        ctx.form.submit()
+        compare(ctx.mock.createRecurringRuleCallCount, 0)
     }
 
     // Monthly is index 3 but enum value 4. Submitting the value (not the index) is what this

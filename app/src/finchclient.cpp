@@ -14,6 +14,28 @@
 
 static constexpr int kMinConnectingMs = 300;
 
+// Shared by the two params-object writers (recordTransaction, createRecurringRule). Returns the
+// comma-joined keys that are absent or unreadable, empty when every key is present and valid —
+// two distinct defects, and only one of them is a missing key: a misspelled *key* arrives absent,
+// while a typo in a key's *value* expression arrives as a present-but-invalid variant. The second
+// is the dangerous one, because each caller's conversions would turn it into a plausible value
+// rather than an error.
+//
+// Returns the list rather than emitting, because the callers differ in exactly the two ways a
+// shared helper cannot absorb: which failure signal carries the message, and how the message names
+// the request. Emptiness is not checked here — each caller has its own fields that are legitimately
+// empty while still required to be present (an open-ended end date, a not-a-transfer destination, a
+// description the user left blank).
+static QString missingOrUnreadableKeys(const QVariantMap& params, const QStringList& required)
+{
+    QStringList badKeys;
+    for (const QString& key : required) {
+        if (!params.contains(key) || !params.value(key).isValid())
+            badKeys.append(key);
+    }
+    return badKeys.join(QStringLiteral(", "));
+}
+
 FinchClient::FinchClient(const QString& socketPath, QObject* parent)
     : QObject(parent)
 {
@@ -229,9 +251,7 @@ void FinchClient::startTransactionsFetch()
     m_transactionsWatcher.setFuture(future);
 }
 
-void FinchClient::recordTransaction(const QString& accountId, const QString& date,
-                                    qlonglong amount, const QString& name,
-                                    const QString& description, int status)
+void FinchClient::recordTransaction(const QVariantMap& params)
 {
     // Authoritative re-entrancy guard, mirroring createAccount: the QML submit-disable is
     // cosmetic, so without this a rapid double-submit could fire two RecordTransaction RPCs
@@ -239,14 +259,65 @@ void FinchClient::recordTransaction(const QString& accountId, const QString& dat
     if (m_recordTransactionInProgress)
         return;
 
+    // An empty description is ordinary, and the daemon rejects an empty account id, date, or name
+    // loudly and specifically — so presence and readability are what this checks.
+    static const QStringList requiredKeys = {
+        QStringLiteral("accountId"), QStringLiteral("date"),
+        QStringLiteral("amount"), QStringLiteral("name"),
+        QStringLiteral("description"), QStringLiteral("status")
+    };
+    const QString badKeys = missingOrUnreadableKeys(params, requiredKeys);
+    if (!badKeys.isEmpty()) {
+        emit transactionRecordFailed(
+            QStringLiteral("Internal error: transaction request missing or unreadable: %1.")
+                .arg(badKeys));
+        return;
+    }
+
+    // The amount is the one field whose conversion can fail on an input that still looks numeric —
+    // an Infinity, or a magnitude outside int64 — and it fails identically for a non-numeric one.
+    // Defense in depth rather than a reachable path: the magnitude field now caps both digits and
+    // scale, so this guards a non-UI caller or a future host. Neither the daemon's
+    // RecordTransaction nor core validates amount, so an unreadable one converting to 0 would
+    // persist as a zero-value transaction.
+    //
+    // Phrased as an internal error, not as advice to enter a smaller amount: this cannot be
+    // reached by user input, and the same failure covers an unreadable value as well as an
+    // oversized one, so blaming the user's magnitude would misdirect on both counts.
+    bool amountOk = false;
+    const qlonglong amount = params.value(QStringLiteral("amount")).toLongLong(&amountOk);
+    if (!amountOk) {
+        emit transactionRecordFailed(
+            QStringLiteral("Internal error: transaction request carried an unreadable amount."));
+        return;
+    }
+    if (amount == 0) {
+        // Not reachable from the UI — the form requires a magnitude above zero — so a zero here
+        // means the caller built the request wrong rather than the user mistyping.
+        emit transactionRecordFailed(
+            QStringLiteral("Internal error: transaction request carried a zero amount."));
+        return;
+    }
+
+    // Same conversion-integrity check the amount gets; the status's *range* is left to the daemon,
+    // which rejects an unspecified or out-of-range status with a specific message.
+    bool statusOk = false;
+    const int status = params.value(QStringLiteral("status")).toInt(&statusOk);
+    if (!statusOk) {
+        emit transactionRecordFailed(
+            QStringLiteral("Internal error: transaction request carried an unreadable status."));
+        return;
+    }
+
     m_recordTransactionInProgress = true;
     emit recordTransactionInProgressChanged();
 
     auto stub = m_stub.get();
-    std::string accountIdStr = accountId.toStdString();
-    std::string dateStr = date.toStdString();
-    std::string nameStr = name.toStdString();
-    std::string descriptionStr = description.toStdString();
+    std::string accountIdStr = params.value(QStringLiteral("accountId")).toString().toStdString();
+    std::string dateStr = params.value(QStringLiteral("date")).toString().toStdString();
+    std::string nameStr = params.value(QStringLiteral("name")).toString().toStdString();
+    std::string descriptionStr =
+        params.value(QStringLiteral("description")).toString().toStdString();
     auto future = QtConcurrent::run([stub, accountIdStr, dateStr, amount, nameStr,
                                      descriptionStr, status]() -> RecordTransactionResult {
         grpc::ClientContext context;
@@ -301,18 +372,11 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
     if (m_createRecurringRuleInProgress)
         return;
 
-    // A params object cannot transpose its arguments, but it trades that for a quieter hazard.
-    // Two distinct defects live here and only one is a missing key: a misspelled *key* is
-    // absent, while a typo in a key's *value* expression yields a present key holding an
-    // invalid QVariant. The second is the dangerous one, because the conversions below turn it
-    // into a plausible value rather than an error. So require each key to be present AND valid.
-    //
-    // Presence and validity are not the whole story, though: a *valid* variant of the wrong type
-    // still converts with a silent fallback. Where that fallback is harmless the daemon rejects
-    // it loudly (an empty account id, name, or start date; an unspecified frequency), and the
-    // checks below cover the two cases it would not catch. Note what is deliberately not checked:
-    // emptiness. An empty end date means open-ended and an empty destination means not-a-transfer,
-    // so rejecting empty or null values here would break the ordinary rule it is meant to protect.
+    // Presence and readability are not the whole story: a *valid* variant of the wrong type still
+    // converts with a silent fallback. Where that fallback is harmless the daemon rejects it loudly
+    // (an empty account id, name, or start date; an unspecified frequency), and the checks below
+    // cover the two cases it would not catch. An empty end date means open-ended and an empty
+    // destination means not-a-transfer, so emptiness is deliberately not a failure here.
     static const QStringList requiredKeys = {
         QStringLiteral("accountId"), QStringLiteral("name"),
         QStringLiteral("amount"), QStringLiteral("frequency"),
@@ -320,28 +384,27 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
         QStringLiteral("dayOfMonth"), QStringLiteral("semiMonthlyDays"),
         QStringLiteral("isTransfer"), QStringLiteral("transferTargetAccountId")
     };
-    QStringList badKeys;
-    for (const QString& key : requiredKeys) {
-        if (!params.contains(key) || !params.value(key).isValid())
-            badKeys.append(key);
-    }
+    const QString badKeys = missingOrUnreadableKeys(params, requiredKeys);
     if (!badKeys.isEmpty()) {
         emit recurringRuleCreateFailed(
             QStringLiteral("Internal error: rule request missing or unreadable: %1.")
-                .arg(badKeys.join(QStringLiteral(", "))));
+                .arg(badKeys));
         return;
     }
 
-    // The amount is the one field whose conversion can fail on an in-range-looking input: a
-    // magnitude past a double's exact-integer ceiling does not fit an int64 and converts to 0.
+    // The amount is the one field whose conversion can fail on an input that still looks numeric —
+    // an Infinity, or a magnitude outside int64 — and a failed conversion yields 0.
     // Neither the daemon nor core validates a non-transfer amount, so a 0 would persist as a
     // rule that silently projects nothing.
     bool amountOk = false;
     const qlonglong amount = params.value(QStringLiteral("amount")).toLongLong(&amountOk);
     if (!amountOk) {
-        // Reachable from the UI: the magnitude field caps neither digits nor scale.
+        // Defense in depth, not a reachable path: the magnitude field caps both digits and scale,
+        // so this guards a non-UI caller or a future host rather than ordinary user input. Phrased
+        // as an internal error for that reason, and because the same failure covers an unreadable
+        // value as well as an oversized one — matching the transaction path's guard.
         emit recurringRuleCreateFailed(
-            QStringLiteral("That amount is too large. Please enter a smaller amount."));
+            QStringLiteral("Internal error: rule request carried an unreadable amount."));
         return;
     }
     if (amount == 0) {

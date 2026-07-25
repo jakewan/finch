@@ -46,10 +46,18 @@ Item {
         if (!canSubmit)
             return
         errorLabel.text = ""
-        // status 3 == TRANSACTION_STATUS_RECONCILED. #38 records actual events; the
-        // Projected/Scheduled statuses belong to the recurring/projection world.
-        client.recordTransaction(accountId, dateField.text, signedCents,
-                                 nameField.text.trim(), descriptionField.text, 3)
+        // A params object, not positional args: named fields make a transpose impossible, and
+        // the key names here are the contract the C++ side unpacks.
+        client.recordTransaction({
+            accountId: accountId,
+            date: dateField.text,
+            amount: signedCents,
+            name: nameField.text.trim(),
+            description: descriptionField.text,
+            // status 3 == TRANSACTION_STATUS_RECONCILED. #38 records actual events; the
+            // Projected/Scheduled statuses belong to the recurring/projection world.
+            status: 3
+        })
     }
 
     Connections {

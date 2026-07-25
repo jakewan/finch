@@ -37,8 +37,9 @@ QtObject {
     property string inFlightRulesAccountId: ""
 
     // RecordTransactionForm (embedded in TransactionsPanel) drives these; default in-progress
-    // false so the embedded form starts enabled. Each field is captured separately so a spec
-    // can catch a name<->description transpose in the 6-arg positional call.
+    // false so the embedded form starts enabled. Each field is captured separately so a spec can
+    // assert them independently — which is what catches a name<->description swap now that the
+    // call carries a params object rather than adjacent positional strings.
     property bool recordTransactionInProgress: false
     property string lastRecordAccountId: ""
     property string lastRecordDate: ""
@@ -46,6 +47,10 @@ QtObject {
     property string lastRecordName: ""
     property string lastRecordDescription: ""
     property int lastRecordStatus: -1
+    // The params object trades the positional-transpose hazard for a silent-key one: a mistyped
+    // key is not an error, it just arrives absent. Recording the key set lets a spec pin the
+    // contract the C++ reader depends on.
+    property var lastRecordKeys: []
     property int recordCallCount: 0
 
     // CreateRecurringRuleForm drives these; default in-progress false so the form starts
@@ -94,14 +99,17 @@ QtObject {
     }
 
     // Mirror the real client: in-progress latches true synchronously on the call and clears
-    // when the test drives a terminal outcome via succeedRecord()/failRecord().
-    function recordTransaction(accountId, date, amount, name, description, status) {
-        lastRecordAccountId = accountId
-        lastRecordDate = date
-        lastRecordAmount = amount
-        lastRecordName = name
-        lastRecordDescription = description
-        lastRecordStatus = status
+    // when the test drives a terminal outcome via succeedRecord()/failRecord(). Takes the same
+    // single params object the real Q_INVOKABLE does, so the key names a spec pins here are the
+    // key names the C++ side reads.
+    function recordTransaction(params) {
+        lastRecordAccountId = params.accountId
+        lastRecordDate = params.date
+        lastRecordAmount = params.amount
+        lastRecordName = params.name
+        lastRecordDescription = params.description
+        lastRecordStatus = params.status
+        lastRecordKeys = Object.keys(params).sort()
         recordCallCount += 1
         recordTransactionInProgress = true
     }

@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Projected transactions and recorded transactions now carry an `is_transfer` flag over gRPC and MCP, so a client can tell why a transfer appears in projected balances but not in cash-flow income.
 - Recurring transfer rules are validated on create and on amount changes: the destination must be an existing account other than the source, and the amount must be positive (direction comes from the source and destination pair). Invalid input returns `InvalidArgument` rather than `Internal`.
 - The Qt app now shows a recurring transfer rule as a debit on the account it leaves, naming the destination. Previously it displayed the rule's stored magnitude as a credit on the account being debited, with no indication of where the money went — affecting any transfer rule created through the MCP tools.
+- The Qt app's amount field on the Transactions and Recurring Rules screens now caps an amount at 12 integer digits, just under $1 trillion. Previously the integer part was unbounded, and an amount around $90 trillion or more could be recorded imprecisely and without warning — that is where the app stops representing that many cents exactly. The field also now refuses amounts with more than two decimal places, in exponent notation, or carrying trailing text; those were already refused as you typed, and could reach the field only from code, so no recorded amount was affected by them.
 
 ### Security
 
