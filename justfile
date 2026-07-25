@@ -7,11 +7,11 @@ proto:
     buf generate
 
 # Build the daemon binary
-build-daemon:
+build-daemon: proto
     cd daemon && go build -o finch-daemon .
 
 # Build the MCP server binary
-build-mcp:
+build-mcp: proto
     cd mcp && go build -o finch-mcp .
 
 # Build the Qt app
@@ -34,11 +34,11 @@ test-core:
     cd core && go test ./...
 
 # Run daemon tests
-test-daemon:
+test-daemon: proto
     cd daemon && go test ./...
 
 # Run MCP server tests
-test-mcp:
+test-mcp: proto
     cd mcp && go test ./...
 
 # Run golangci-lint on all Go modules
@@ -47,25 +47,24 @@ lint: lint-core lint-daemon lint-mcp
 lint-core:
     cd core && golangci-lint run ./...
 
-lint-daemon:
+lint-daemon: proto
     cd daemon && golangci-lint run ./...
 
-lint-mcp:
+lint-mcp: proto
     cd mcp && golangci-lint run ./...
 
 # Scan all Go modules for known vulnerabilities.
-# Needs generated proto code — run `just proto` first, or the daemon and MCP scans
-# fail to load packages (both import the gitignored daemon/gen).
 # Reports only advisories reachable from finch's own code; CI enforces the same check.
+# For the complementary enumerating scan, see `.claude/rules/ci.md`.
 vuln: vuln-core vuln-daemon vuln-mcp
 
 vuln-core:
     cd core && govulncheck ./...
 
-vuln-daemon:
+vuln-daemon: proto
     cd daemon && govulncheck ./...
 
-vuln-mcp:
+vuln-mcp: proto
     cd mcp && govulncheck ./...
 
 # Format all Go code
@@ -75,7 +74,7 @@ fmt:
     cd mcp && go fmt ./...
 
 # Reconcile go.mod/go.sum across all Go modules (run after a dependency change)
-tidy:
+tidy: proto
     cd core && go mod tidy
     cd daemon && go mod tidy
     cd mcp && go mod tidy
