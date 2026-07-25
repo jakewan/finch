@@ -151,6 +151,17 @@ TestCase {
         compare(ctx.mock.lastRecordStatus, 3)
     }
 
+    // The params object trades the positional-transpose hazard for a silent-key one: a mistyped
+    // key arrives absent rather than erroring. This pins the exact key set the C++ reader
+    // unpacks, which no other spec can reach across the QML/C++ seam.
+    function test_submitSendsExpectedParamKeys() {
+        var ctx = build({ accountId: "a1" })
+        fillValidExpense(ctx)
+        ctx.form.submit()
+        compare(ctx.mock.lastRecordKeys.join(","),
+                "accountId,amount,date,description,name,status")
+    }
+
     function test_submitSendsIncomeAsPositiveCents() {
         var ctx = build({ accountId: "a1" })
         ctx.form.nameText = "Paycheck"

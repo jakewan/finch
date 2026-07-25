@@ -229,9 +229,7 @@ void FinchClient::startTransactionsFetch()
     m_transactionsWatcher.setFuture(future);
 }
 
-void FinchClient::recordTransaction(const QString& accountId, const QString& date,
-                                    qlonglong amount, const QString& name,
-                                    const QString& description, int status)
+void FinchClient::recordTransaction(const QVariantMap& params)
 {
     // Authoritative re-entrancy guard, mirroring createAccount: the QML submit-disable is
     // cosmetic, so without this a rapid double-submit could fire two RecordTransaction RPCs
@@ -239,14 +237,67 @@ void FinchClient::recordTransaction(const QString& accountId, const QString& dat
     if (m_recordTransactionInProgress)
         return;
 
+    // Required keys present AND valid, mirroring createRecurringRule: a misspelled key arrives
+    // absent, while a typo in a key's value expression arrives as a present-but-invalid variant,
+    // and the conversions below would turn the second into a plausible wrong value rather than an
+    // error. Emptiness is deliberately not checked — an empty description is ordinary, and the
+    // daemon rejects an empty account id, date, or name loudly and specifically.
+    static const QStringList requiredKeys = {
+        QStringLiteral("accountId"), QStringLiteral("date"),
+        QStringLiteral("amount"), QStringLiteral("name"),
+        QStringLiteral("description"), QStringLiteral("status")
+    };
+    QStringList badKeys;
+    for (const QString& key : requiredKeys) {
+        if (!params.contains(key) || !params.value(key).isValid())
+            badKeys.append(key);
+    }
+    if (!badKeys.isEmpty()) {
+        emit transactionRecordFailed(
+            QStringLiteral("Internal error: transaction request missing or unreadable: %1.")
+                .arg(badKeys.join(QStringLiteral(", "))));
+        return;
+    }
+
+    // The amount is the one field whose conversion can fail on an input that looks in range.
+    // Defense in depth rather than a reachable path: the magnitude field now caps both digits and
+    // scale, so this guards a non-UI caller or a future host. Neither the daemon's
+    // RecordTransaction nor core validates amount, so an unreadable one converting to 0 would
+    // persist as a zero-value transaction.
+    bool amountOk = false;
+    const qlonglong amount = params.value(QStringLiteral("amount")).toLongLong(&amountOk);
+    if (!amountOk) {
+        emit transactionRecordFailed(
+            QStringLiteral("That amount is too large. Please enter a smaller amount."));
+        return;
+    }
+    if (amount == 0) {
+        // Not reachable from the UI — the form requires a magnitude above zero — so a zero here
+        // means the caller built the request wrong rather than the user mistyping.
+        emit transactionRecordFailed(
+            QStringLiteral("Internal error: transaction request carried a zero amount."));
+        return;
+    }
+
+    // Same conversion-integrity check the amount gets; the status's *range* is left to the daemon,
+    // which rejects an unspecified or out-of-range status with a specific message.
+    bool statusOk = false;
+    const int status = params.value(QStringLiteral("status")).toInt(&statusOk);
+    if (!statusOk) {
+        emit transactionRecordFailed(
+            QStringLiteral("Internal error: transaction request carried an unreadable status."));
+        return;
+    }
+
     m_recordTransactionInProgress = true;
     emit recordTransactionInProgressChanged();
 
     auto stub = m_stub.get();
-    std::string accountIdStr = accountId.toStdString();
-    std::string dateStr = date.toStdString();
-    std::string nameStr = name.toStdString();
-    std::string descriptionStr = description.toStdString();
+    std::string accountIdStr = params.value(QStringLiteral("accountId")).toString().toStdString();
+    std::string dateStr = params.value(QStringLiteral("date")).toString().toStdString();
+    std::string nameStr = params.value(QStringLiteral("name")).toString().toStdString();
+    std::string descriptionStr =
+        params.value(QStringLiteral("description")).toString().toStdString();
     auto future = QtConcurrent::run([stub, accountIdStr, dateStr, amount, nameStr,
                                      descriptionStr, status]() -> RecordTransactionResult {
         grpc::ClientContext context;
@@ -339,7 +390,8 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
     bool amountOk = false;
     const qlonglong amount = params.value(QStringLiteral("amount")).toLongLong(&amountOk);
     if (!amountOk) {
-        // Reachable from the UI: the magnitude field caps neither digits nor scale.
+        // Defense in depth, not a reachable path: the magnitude field caps both digits and scale,
+        // so this guards a non-UI caller or a future host rather than ordinary user input.
         emit recurringRuleCreateFailed(
             QStringLiteral("That amount is too large. Please enter a smaller amount."));
         return;

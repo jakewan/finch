@@ -117,12 +117,12 @@ public:
     Q_INVOKABLE void listAccounts();
     Q_INVOKABLE void createAccount(const QString& name, int accountType);
     Q_INVOKABLE void listTransactions(const QString& accountId);
-    Q_INVOKABLE void recordTransaction(const QString& accountId, const QString& date,
-                                       qlonglong amount, const QString& name,
-                                       const QString& description, int status);
-    // Takes a params object rather than positional arguments: the call carries ten fields, and
-    // named keys remove the transpose hazard that many positional arguments invite. The
-    // required keys are enumerated (and enforced) in the implementation.
+    // Params objects rather than positional arguments, for both money-writing calls. Named keys
+    // remove the transpose hazard that adjacent same-typed arguments invite — and, on the
+    // transaction side, a positional `qlonglong amount` offered no QVariant to range-check, which
+    // is why that path previously had no client-side amount guard at all. The required keys are
+    // enumerated (and enforced) in each implementation.
+    Q_INVOKABLE void recordTransaction(const QVariantMap& params);
     Q_INVOKABLE void createRecurringRule(const QVariantMap& params);
     Q_INVOKABLE void listRecurringRules(const QString& accountId);
     Q_INVOKABLE void fetchTimeSeries(const QString& fromDate, const QString& toDate,
