@@ -273,16 +273,21 @@ void FinchClient::recordTransaction(const QVariantMap& params)
         return;
     }
 
-    // The amount is the one field whose conversion can fail on an input that looks in range.
+    // The amount is the one field whose conversion can fail on an input that still looks numeric —
+    // an Infinity, or a magnitude outside int64 — and it fails identically for a non-numeric one.
     // Defense in depth rather than a reachable path: the magnitude field now caps both digits and
     // scale, so this guards a non-UI caller or a future host. Neither the daemon's
     // RecordTransaction nor core validates amount, so an unreadable one converting to 0 would
     // persist as a zero-value transaction.
+    //
+    // Phrased as an internal error, not as advice to enter a smaller amount: this cannot be
+    // reached by user input, and the same failure covers an unreadable value as well as an
+    // oversized one, so blaming the user's magnitude would misdirect on both counts.
     bool amountOk = false;
     const qlonglong amount = params.value(QStringLiteral("amount")).toLongLong(&amountOk);
     if (!amountOk) {
         emit transactionRecordFailed(
-            QStringLiteral("That amount is too large. Please enter a smaller amount."));
+            QStringLiteral("Internal error: transaction request carried an unreadable amount."));
         return;
     }
     if (amount == 0) {
@@ -394,9 +399,11 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
     const qlonglong amount = params.value(QStringLiteral("amount")).toLongLong(&amountOk);
     if (!amountOk) {
         // Defense in depth, not a reachable path: the magnitude field caps both digits and scale,
-        // so this guards a non-UI caller or a future host rather than ordinary user input.
+        // so this guards a non-UI caller or a future host rather than ordinary user input. Phrased
+        // as an internal error for that reason, and because the same failure covers an unreadable
+        // value as well as an oversized one — matching the transaction path's guard.
         emit recurringRuleCreateFailed(
-            QStringLiteral("That amount is too large. Please enter a smaller amount."));
+            QStringLiteral("Internal error: rule request carried an unreadable amount."));
         return;
     }
     if (amount == 0) {
