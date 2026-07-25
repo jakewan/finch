@@ -14,6 +14,27 @@
 
 static constexpr int kMinConnectingMs = 300;
 
+// Shared by the two params-object writers (recordTransaction, createRecurringRule). Returns the
+// comma-joined keys that are absent or unreadable, empty when every key is present and valid —
+// two distinct defects, and only one of them is a missing key: a misspelled *key* arrives absent,
+// while a typo in a key's *value* expression arrives as a present-but-invalid variant. The second
+// is the dangerous one, because each caller's conversions would turn it into a plausible value
+// rather than an error.
+//
+// Returns the list rather than emitting, because the callers differ in exactly the two ways a
+// shared helper cannot absorb: which failure signal carries the message, and how the message names
+// the request. Emptiness is not checked here — each caller has its own legitimately-empty fields
+// (an open-ended end date, a not-a-transfer destination, an absent description).
+static QString missingOrUnreadableKeys(const QVariantMap& params, const QStringList& required)
+{
+    QStringList badKeys;
+    for (const QString& key : required) {
+        if (!params.contains(key) || !params.value(key).isValid())
+            badKeys.append(key);
+    }
+    return badKeys.join(QStringLiteral(", "));
+}
+
 FinchClient::FinchClient(const QString& socketPath, QObject* parent)
     : QObject(parent)
 {
@@ -237,25 +258,18 @@ void FinchClient::recordTransaction(const QVariantMap& params)
     if (m_recordTransactionInProgress)
         return;
 
-    // Required keys present AND valid, mirroring createRecurringRule: a misspelled key arrives
-    // absent, while a typo in a key's value expression arrives as a present-but-invalid variant,
-    // and the conversions below would turn the second into a plausible wrong value rather than an
-    // error. Emptiness is deliberately not checked — an empty description is ordinary, and the
-    // daemon rejects an empty account id, date, or name loudly and specifically.
+    // An empty description is ordinary, and the daemon rejects an empty account id, date, or name
+    // loudly and specifically — so presence and readability are what this checks.
     static const QStringList requiredKeys = {
         QStringLiteral("accountId"), QStringLiteral("date"),
         QStringLiteral("amount"), QStringLiteral("name"),
         QStringLiteral("description"), QStringLiteral("status")
     };
-    QStringList badKeys;
-    for (const QString& key : requiredKeys) {
-        if (!params.contains(key) || !params.value(key).isValid())
-            badKeys.append(key);
-    }
+    const QString badKeys = missingOrUnreadableKeys(params, requiredKeys);
     if (!badKeys.isEmpty()) {
         emit transactionRecordFailed(
             QStringLiteral("Internal error: transaction request missing or unreadable: %1.")
-                .arg(badKeys.join(QStringLiteral(", "))));
+                .arg(badKeys));
         return;
     }
 
@@ -352,18 +366,11 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
     if (m_createRecurringRuleInProgress)
         return;
 
-    // A params object cannot transpose its arguments, but it trades that for a quieter hazard.
-    // Two distinct defects live here and only one is a missing key: a misspelled *key* is
-    // absent, while a typo in a key's *value* expression yields a present key holding an
-    // invalid QVariant. The second is the dangerous one, because the conversions below turn it
-    // into a plausible value rather than an error. So require each key to be present AND valid.
-    //
-    // Presence and validity are not the whole story, though: a *valid* variant of the wrong type
-    // still converts with a silent fallback. Where that fallback is harmless the daemon rejects
-    // it loudly (an empty account id, name, or start date; an unspecified frequency), and the
-    // checks below cover the two cases it would not catch. Note what is deliberately not checked:
-    // emptiness. An empty end date means open-ended and an empty destination means not-a-transfer,
-    // so rejecting empty or null values here would break the ordinary rule it is meant to protect.
+    // Presence and readability are not the whole story: a *valid* variant of the wrong type still
+    // converts with a silent fallback. Where that fallback is harmless the daemon rejects it loudly
+    // (an empty account id, name, or start date; an unspecified frequency), and the checks below
+    // cover the two cases it would not catch. An empty end date means open-ended and an empty
+    // destination means not-a-transfer, so emptiness is deliberately not a failure here.
     static const QStringList requiredKeys = {
         QStringLiteral("accountId"), QStringLiteral("name"),
         QStringLiteral("amount"), QStringLiteral("frequency"),
@@ -371,15 +378,11 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
         QStringLiteral("dayOfMonth"), QStringLiteral("semiMonthlyDays"),
         QStringLiteral("isTransfer"), QStringLiteral("transferTargetAccountId")
     };
-    QStringList badKeys;
-    for (const QString& key : requiredKeys) {
-        if (!params.contains(key) || !params.value(key).isValid())
-            badKeys.append(key);
-    }
+    const QString badKeys = missingOrUnreadableKeys(params, requiredKeys);
     if (!badKeys.isEmpty()) {
         emit recurringRuleCreateFailed(
             QStringLiteral("Internal error: rule request missing or unreadable: %1.")
-                .arg(badKeys.join(QStringLiteral(", "))));
+                .arg(badKeys));
         return;
     }
 
