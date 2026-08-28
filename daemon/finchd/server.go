@@ -153,6 +153,10 @@ func (s *Server) CreateRecurringRule(ctx context.Context, req *finchv1.CreateRec
 		}
 	}
 
+	if err := checkAmountMagnitude("amount", req.Amount); err != nil {
+		return nil, err
+	}
+
 	startDate, err := time.Parse(time.DateOnly, req.StartDate)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid start_date: %v", err)
@@ -206,6 +210,9 @@ func (s *Server) ListRecurringRules(ctx context.Context, req *finchv1.ListRecurr
 func (s *Server) UpdateRecurringRuleAmount(ctx context.Context, req *finchv1.UpdateRecurringRuleAmountRequest) (*finchv1.UpdateRecurringRuleAmountResponse, error) {
 	if req.RuleId == "" {
 		return nil, status.Error(codes.InvalidArgument, "rule_id must not be empty")
+	}
+	if err := checkAmountMagnitude("new_amount", req.NewAmount); err != nil {
+		return nil, err
 	}
 	effectiveDate, err := time.Parse(time.DateOnly, req.EffectiveDate)
 	if err != nil {
@@ -267,11 +274,14 @@ func (s *Server) RecordTransaction(ctx context.Context, req *finchv1.RecordTrans
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, status.Error(codes.InvalidArgument, "name must not be empty")
 	}
-	if req.AccountId == "" {
+	if strings.TrimSpace(req.AccountId) == "" {
 		return nil, status.Error(codes.InvalidArgument, "account_id must not be empty")
 	}
 	if req.Status == finchv1.TransactionStatus_TRANSACTION_STATUS_UNSPECIFIED {
 		return nil, status.Error(codes.InvalidArgument, "transaction status must be specified")
+	}
+	if err := checkAmountMagnitude("amount", req.Amount); err != nil {
+		return nil, err
 	}
 	txnDate, err := time.Parse(time.DateOnly, req.Date)
 	if err != nil {
@@ -288,7 +298,7 @@ func (s *Server) RecordTransaction(ctx context.Context, req *finchv1.RecordTrans
 		RecurringRuleID: req.RecurringRuleId,
 	})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "record transaction: %v", err)
+		return nil, txnError("record transaction", err)
 	}
 
 	return &finchv1.RecordTransactionResponse{
@@ -319,7 +329,7 @@ func (s *Server) UpdateTransactionStatus(ctx context.Context, req *finchv1.Updat
 		return nil, status.Error(codes.InvalidArgument, "new_status must be specified")
 	}
 	if err := s.db.UpdateTransactionStatus(ctx, req.TransactionId, core.TransactionStatus(req.NewStatus)); err != nil {
-		return nil, status.Errorf(codes.Internal, "update transaction status: %v", err)
+		return nil, txnError("update transaction status", err)
 	}
 	return &finchv1.UpdateTransactionStatusResponse{}, nil
 }
@@ -330,6 +340,14 @@ func (s *Server) CreateTransfer(ctx context.Context, req *finchv1.CreateTransfer
 	}
 	if req.Amount <= 0 {
 		return nil, status.Error(codes.InvalidArgument, "amount must be positive")
+	}
+	// The zero branch of the check below is unreachable behind the guard above; it stays
+	// because the bound is one rule, not a per-handler assembly.
+	if err := checkAmountMagnitude("amount", req.Amount); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		return nil, status.Error(codes.InvalidArgument, "name must not be empty")
 	}
 	if req.Status == finchv1.TransactionStatus_TRANSACTION_STATUS_UNSPECIFIED {
 		return nil, status.Error(codes.InvalidArgument, "transaction status must be specified")
@@ -349,7 +367,7 @@ func (s *Server) CreateTransfer(ctx context.Context, req *finchv1.CreateTransfer
 		Status:               core.TransactionStatus(req.Status),
 		RecurringRuleID:      req.RecurringRuleId,
 	}); err != nil {
-		return nil, status.Errorf(codes.Internal, "create transfer: %v", err)
+		return nil, txnError("create transfer", err)
 	}
 	return &finchv1.CreateTransferResponse{}, nil
 }
@@ -495,6 +513,34 @@ func accountError(op string, err error) error {
 // and its message contains the words "not found" — so the string fallback would
 // misclassify it as NotFound if it ran first.
 func ruleError(op string, err error) error {
+	if errors.Is(err, core.ErrInvalidInput) {
+		return status.Errorf(codes.InvalidArgument, "%s: %v", op, err)
+	}
+	if errors.Is(err, core.ErrNotFound) || strings.Contains(err.Error(), "not found") {
+		return status.Errorf(codes.NotFound, "%s: %v", op, err)
+	}
+	return status.Errorf(codes.Internal, "%s: %v", op, err)
+}
+
+// checkAmountMagnitude mirrors core's money invariant at the boundary, so a bad amount
+// surfaces as InvalidArgument naming the offending proto field rather than reaching the
+// caller as Internal. Core re-validates and remains the authority for a non-gRPC caller;
+// the bound itself is read from core rather than restated here, so the two cannot drift.
+func checkAmountMagnitude(field string, amount int64) error {
+	if amount == 0 {
+		return status.Errorf(codes.InvalidArgument, "%s must not be zero", field)
+	}
+	if amount > core.MaxAmountCents || amount < -core.MaxAmountCents {
+		return status.Errorf(codes.InvalidArgument,
+			"%s magnitude must not exceed %d cents, got %d", field, core.MaxAmountCents, amount)
+	}
+	return nil
+}
+
+// txnError maps core transaction errors to gRPC status codes. It mirrors ruleError,
+// ordering included: typed errors first, then a string fallback for the transaction paths
+// in core that do not yet wrap a sentinel.
+func txnError(op string, err error) error {
 	if errors.Is(err, core.ErrInvalidInput) {
 		return status.Errorf(codes.InvalidArgument, "%s: %v", op, err)
 	}

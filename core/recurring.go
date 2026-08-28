@@ -108,6 +108,9 @@ func (db *DB) CreateRecurringRule(ctx context.Context, params CreateRecurringRul
 			return nil, fmt.Errorf("semi_monthly_days must each be 1-31")
 		}
 	}
+	if err := validateAmountMagnitude(params.Amount); err != nil {
+		return nil, err
+	}
 	if err := db.validateTransferFields(ctx, params.AccountID, params.IsTransfer, params.TransferTargetAccountID, params.Amount); err != nil {
 		return nil, err
 	}
@@ -230,6 +233,9 @@ func (db *DB) ListRecurringRules(ctx context.Context, accountID string) ([]Recur
 func (db *DB) UpdateRecurringRuleAmount(ctx context.Context, ruleID string, newAmount int64, effectiveDate time.Time, reason string) error {
 	if ruleID == "" {
 		return errors.New("rule_id must not be empty")
+	}
+	if err := validateAmountMagnitude(newAmount); err != nil {
+		return err
 	}
 
 	tx, err := db.conn.BeginTx(ctx, nil)
