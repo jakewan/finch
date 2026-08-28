@@ -47,11 +47,16 @@ Item {
     // parseFloat reads the magnitude locale-cleanly because the pattern above forbids a sign and
     // a comma decimal. NaN when blank or non-numeric.
     readonly property real magnitude: parseFloat(amountField.text)
-    // Reject 0: a $0 entry is meaningless, and nothing below this control validates a non-transfer
-    // amount (a transfer's is checked by both the daemon and core, but that is the narrower case). No
-    // separate isNaN check — NaN > 0 is false — and no separate magnitude bound, because the
-    // pattern's digit cap *is* the bound. Two numeric bounds would be two different limits
-    // wearing one name.
+    // Reject 0: a $0 entry is meaningless. Core and the daemon now reject one too, so this is the
+    // first gate rather than the only one — it exists to answer in the form instead of spending a
+    // round trip. No separate isNaN check — NaN > 0 is false — and no separate magnitude bound,
+    // because the pattern's digit cap *is* the bound. Two numeric bounds would be two different
+    // limits wearing one name.
+    //
+    // That digit cap and core.MaxAmountCents are the same number, reached by two arguments: this
+    // field from the 2^53 seam where a JS number stops representing cents exactly, the domain from
+    // the int64 headroom its projection sums need. Keep them equal; if they ever must diverge, the
+    // domain governs and this side moves.
     readonly property bool amountValid: amountPattern.test(amountField.text) && magnitude > 0
     // Math.round avoids float drift (12.34 * 100 -> 1233.9999…).
     // Typed var, not int: cents cross into a 64-bit qlonglong and a QML int is 32-bit — an int

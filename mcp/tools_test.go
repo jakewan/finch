@@ -795,6 +795,22 @@ func TestTransactionTools(t *testing.T) {
 			}
 		})
 
+		// MCP is the client that could reach the unvalidated amount path, so one test
+		// pins that the daemon's rejection actually propagates through the handler
+		// rather than being swallowed on the way back.
+		t.Run("rejects_zero_amount", func(t *testing.T) {
+			_, _, err := handler(ctx, nil, RecordTransactionInput{
+				AccountID: accountID,
+				Date:      "2025-01-15",
+				Amount:    0,
+				Name:      "Nothing",
+				Status:    "RECONCILED",
+			})
+			if err == nil {
+				t.Fatal("expected error for a zero amount")
+			}
+		})
+
 		t.Run("accepts_prefixed_TRANSACTION_STATUS_RECONCILED", func(t *testing.T) {
 			_, _, err := handler(ctx, nil, RecordTransactionInput{
 				AccountID: accountID,

@@ -301,7 +301,7 @@ func newUpdateAccountTypeHandler(client finchv1.FinchServiceClient) func(context
 type CreateRecurringRuleInput struct {
 	AccountID               string  `json:"account_id" jsonschema:"UUID of the account"`
 	Name                    string  `json:"name" jsonschema:"name of the recurring rule"`
-	Amount                  int64   `json:"amount" jsonschema:"amount in cents; negative for an expense and positive for income. For a transfer rule (is_transfer true) it must instead be a positive magnitude — direction comes from the account and target pair, so the source is debited and the target credited"`
+	Amount                  int64   `json:"amount" jsonschema:"amount in cents; negative for an expense and positive for income. For a transfer rule (is_transfer true) it must instead be a positive magnitude — direction comes from the account and target pair, so the source is debited and the target credited. Either way the amount must not be zero, and its magnitude must not exceed 99999999999999 cents (just under $1 trillion)"`
 	Frequency               string  `json:"frequency" jsonschema:"WEEKLY, BIWEEKLY, SEMI_MONTHLY, MONTHLY, or YEARLY"`
 	StartDate               string  `json:"start_date" jsonschema:"ISO 8601 date (YYYY-MM-DD)"`
 	EndDate                 string  `json:"end_date,omitempty" jsonschema:"optional end date (YYYY-MM-DD)"`
@@ -400,7 +400,7 @@ func newListRecurringRulesHandler(client finchv1.FinchServiceClient) func(contex
 
 type UpdateRecurringRuleAmountInput struct {
 	RuleID        string `json:"rule_id" jsonschema:"UUID of the recurring rule"`
-	NewAmount     int64  `json:"new_amount" jsonschema:"new amount in cents"`
+	NewAmount     int64  `json:"new_amount" jsonschema:"new amount in cents; must not be zero, and its magnitude must not exceed 99999999999999 cents (just under $1 trillion)"`
 	EffectiveDate string `json:"effective_date" jsonschema:"when the new amount takes effect (YYYY-MM-DD)"`
 	Reason        string `json:"reason,omitempty" jsonschema:"optional reason for the change"`
 }
@@ -506,7 +506,7 @@ func newEndRecurringRuleHandler(client finchv1.FinchServiceClient) func(context.
 type RecordTransactionInput struct {
 	AccountID       string `json:"account_id" jsonschema:"UUID of the account"`
 	Date            string `json:"date" jsonschema:"transaction date (YYYY-MM-DD)"`
-	Amount          int64  `json:"amount" jsonschema:"amount in cents (negative for withdrawals)"`
+	Amount          int64  `json:"amount" jsonschema:"amount in cents (negative for withdrawals); must not be zero, and its magnitude must not exceed 99999999999999 cents (just under $1 trillion)"`
 	Name            string `json:"name" jsonschema:"transaction name"`
 	Description     string `json:"description,omitempty" jsonschema:"optional description"`
 	Status          string `json:"status" jsonschema:"PROJECTED, SCHEDULED, or RECONCILED"`
@@ -630,7 +630,7 @@ func newUpdateTransactionStatusHandler(client finchv1.FinchServiceClient) func(c
 type CreateTransferInput struct {
 	SourceAccountID      string `json:"source_account_id" jsonschema:"UUID of the source account"`
 	DestinationAccountID string `json:"destination_account_id" jsonschema:"UUID of the destination account"`
-	Amount               int64  `json:"amount" jsonschema:"transfer amount in cents (positive)"`
+	Amount               int64  `json:"amount" jsonschema:"transfer amount in cents (positive); must not be zero, and its magnitude must not exceed 99999999999999 cents (just under $1 trillion)"`
 	Date                 string `json:"date" jsonschema:"transfer date (YYYY-MM-DD)"`
 	Name                 string `json:"name" jsonschema:"transfer name"`
 	Description          string `json:"description,omitempty" jsonschema:"optional description"`
