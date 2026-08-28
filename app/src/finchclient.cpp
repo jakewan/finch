@@ -278,8 +278,9 @@ void FinchClient::recordTransaction(const QVariantMap& params)
     // an Infinity, or a magnitude outside int64 — and it fails identically for a non-numeric one.
     // Defense in depth rather than a reachable path: the magnitude field now caps both digits and
     // scale, so this guards a non-UI caller or a future host. Core and the daemon now bound the
-    // amount, so this no longer stands in for a missing server check; it catches a value the
-    // request cannot carry as an int64 at all, before spending a round trip to be told so.
+    // amount, so this no longer stands in for a missing server check; it catches a value that
+    // cannot become an int64 at all, which would otherwise reach the daemon as the conversion's
+    // zero fallback and be refused under a message naming the wrong problem.
     //
     // Phrased as an internal error, not as advice to enter a smaller amount: this cannot be
     // reached by user input, and the same failure covers an unreadable value as well as an

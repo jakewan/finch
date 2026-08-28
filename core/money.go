@@ -19,11 +19,15 @@ import "fmt"
 // cap makes overflow require a deliberately absurd request rather than an ordinary one;
 // bounding the horizon itself is a separate question.
 //
-// A consequence rather than the reason: every stored amount stays below 2^53 cents, so it
-// survives a hop through a double-precision number exactly. The Qt app's input field caps at
-// this same value, reached from that seam rather than from this one, so client and domain
-// agree instead of each carrying its own limit. If the two ever must diverge, this one
-// governs.
+// A consequence rather than the reason: every stored amount stays below 2^53 cents, so an
+// individual amount survives a hop through a double-precision number exactly. That is a
+// property of one amount and not of a balance, which accumulates without a bound and is
+// narrowed to a double on the app's chart path.
+//
+// Neither argument picks these digits. Accumulation headroom says the cap must sit far below
+// int64; the app's field says its own must sit far below 2^53 cents (~$90 trillion). Both
+// admit a wide range, and $1 trillion is the round number chosen inside both, so client and
+// domain hold one limit rather than two. If they ever must diverge, this one governs.
 const MaxAmountCents int64 = 99999999999999
 
 // validateAmountMagnitude enforces the one rule every money-writing path shares. Zero is

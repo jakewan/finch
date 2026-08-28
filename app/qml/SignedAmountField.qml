@@ -53,10 +53,11 @@ Item {
     // because the pattern's digit cap *is* the bound. Two numeric bounds would be two different
     // limits wearing one name.
     //
-    // That digit cap and core.MaxAmountCents are the same number, reached by two arguments: this
-    // field from the 2^53 seam where a JS number stops representing cents exactly, the domain from
-    // the int64 headroom its projection sums need. Keep them equal; if they ever must diverge, the
-    // domain governs and this side moves.
+    // That digit cap and core.MaxAmountCents are the same number, and deliberately so rather than
+    // by derivation: this field needs a cap well inside 2^53 cents, the domain needs one well
+    // inside the int64 headroom its projection sums consume, and $1 trillion is the round number
+    // that sits inside both. Keep them equal; if they ever must diverge, the domain governs and
+    // this side moves.
     readonly property bool amountValid: amountPattern.test(amountField.text) && magnitude > 0
     // Math.round avoids float drift (12.34 * 100 -> 1233.9999…).
     // Typed var, not int: cents cross into a 64-bit qlonglong and a QML int is 32-bit — an int

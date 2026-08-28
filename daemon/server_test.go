@@ -243,7 +243,8 @@ func TestProjectBalancesViaGRPC(t *testing.T) {
 	}
 }
 
-// createRulesAccount is a small helper for the recurring-rule error tests below.
+// createRulesAccount is a small helper for the recurring-rule error tests below, and the
+// base account of createTransferPair.
 func createRulesAccount(t *testing.T, client finchv1.FinchServiceClient, ctx context.Context) string {
 	t.Helper()
 	acct, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
@@ -356,6 +357,14 @@ func TestCreateRecurringRuleValidationReturnsInvalidArgument(t *testing.T) {
 			},
 		},
 		{
+			name: "math.MaxInt64 amount",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "Rent", Amount: math.MaxInt64,
+				Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+				DayOfMonth: 1,
+			},
+		},
+		{
 			name: "math.MinInt64 amount",
 			req: &finchv1.CreateRecurringRuleRequest{
 				AccountId: accountID, Name: "Rent", Amount: math.MinInt64,
@@ -417,6 +426,8 @@ func TestUpdateRecurringRuleAmountTransferRejectsNonPositive(t *testing.T) {
 		t.Fatalf("CreateRecurringRule: %v", err)
 	}
 
+	// The zero row is now answered by the universal magnitude bound before the transfer
+	// rule sees it, so -100000 is the row still proving the positivity check itself.
 	for _, amount := range []int64{0, -100000} {
 		_, err := client.UpdateRecurringRuleAmount(ctx, &finchv1.UpdateRecurringRuleAmountRequest{
 			RuleId: rule.Rule.Id, NewAmount: amount, EffectiveDate: "2025-02-01",
@@ -525,9 +536,9 @@ func TestProjectBalanceOnDateViaGRPC(t *testing.T) {
 	}
 }
 
-// createTransferPair returns two distinct accounts, for the RPCs that move money
-// between them. createRulesAccount cannot serve both ends — a transfer to the account
-// it left is rejected on its own grounds, which would mask the case under test.
+// createTransferPair returns the two distinct accounts a transfer needs. (Nothing
+// currently rejects a transfer whose source and destination are the same account —
+// the recurring-rule path guards that, this one does not.)
 func createTransferPair(t *testing.T, client finchv1.FinchServiceClient, ctx context.Context) (string, string) {
 	t.Helper()
 	source := createRulesAccount(t, client, ctx)
@@ -721,7 +732,9 @@ func TestCreateTransferValidationReturnsInvalidArgument(t *testing.T) {
 	}
 }
 
-// Both accounts must exist for this to reach the amount check at all — foreign keys are on.
+// Both accounts must exist for the write to land — foreign keys are on. The amount check
+// itself runs before any database access, so this proves the cap is storable, not merely
+// that it passes validation.
 func TestCreateTransferAcceptsAmountAtTheCap(t *testing.T) {
 	client := startTestServer(t)
 	ctx := context.Background()

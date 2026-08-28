@@ -211,6 +211,11 @@ func (s *Server) UpdateRecurringRuleAmount(ctx context.Context, req *finchv1.Upd
 	if req.RuleId == "" {
 		return nil, status.Error(codes.InvalidArgument, "rule_id must not be empty")
 	}
+	// Unlike CreateRecurringRule and CreateTransfer, this handler cannot let the narrower
+	// transfer rule answer first: whether the rule is a transfer is a property of the stored
+	// row, and reading it belongs in core. So a zero on a transfer rule reports the generic
+	// message here rather than "must be positive". Deliberate, not an oversight in the
+	// transfer-first ordering the other two follow.
 	if err := checkAmountMagnitude("new_amount", req.NewAmount); err != nil {
 		return nil, err
 	}
@@ -537,14 +542,17 @@ func checkAmountMagnitude(field string, amount int64) error {
 	return nil
 }
 
-// txnError maps core transaction errors to gRPC status codes. It mirrors ruleError,
-// ordering included: typed errors first, then a string fallback for the transaction paths
-// in core that do not yet wrap a sentinel.
+// txnError maps core transaction errors to gRPC status codes, by error identity only.
+// ruleError carries an additional substring fallback for rule paths in core that predate
+// the sentinels; the transaction paths have none, so matching on message text here would
+// guard an empty set while standing ready to misclassify any future error whose wording
+// happens to contain the phrase — the trap ruleError documents and event-sourcing.md
+// forbids. A new transaction error wraps a sentinel instead.
 func txnError(op string, err error) error {
 	if errors.Is(err, core.ErrInvalidInput) {
 		return status.Errorf(codes.InvalidArgument, "%s: %v", op, err)
 	}
-	if errors.Is(err, core.ErrNotFound) || strings.Contains(err.Error(), "not found") {
+	if errors.Is(err, core.ErrNotFound) {
 		return status.Errorf(codes.NotFound, "%s: %v", op, err)
 	}
 	return status.Errorf(codes.Internal, "%s: %v", op, err)
