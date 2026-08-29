@@ -82,8 +82,9 @@ TestCase {
         compare(ctx.form.canSubmit, false)
     }
 
-    // The form is the SOLE amount gate — the daemon does not validate amount at all — so a
-    // zero, blank, or non-numeric magnitude must keep submit disabled.
+    // The form is the FIRST amount gate, not the only one — core and the daemon reject a zero
+    // amount too. It gates here so a zero, blank, or non-numeric magnitude is answered in the
+    // form rather than by a round trip, which is why submit must stay disabled.
     function test_disabledWhenAmountZero() {
         var ctx = build({ accountId: "a1" })
         ctx.form.nameText = "Coffee"

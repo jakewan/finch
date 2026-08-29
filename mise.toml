@@ -4,7 +4,7 @@
 # on stdlib advisories, which makes this a security-relevant pin with an end-of-life
 # clock rather than a compatibility floor. Keep within one minor of current Go, and keep
 # it identical to the go-version in the CI workflows (asserted there).
-go = "1.26.5"
+go = "1.26.7"
 just = "1.57.0"
 buf = "1.66.1"
 "go:google.golang.org/protobuf/cmd/protoc-gen-go" = "1.36.11"

@@ -277,9 +277,10 @@ void FinchClient::recordTransaction(const QVariantMap& params)
     // The amount is the one field whose conversion can fail on an input that still looks numeric —
     // an Infinity, or a magnitude outside int64 — and it fails identically for a non-numeric one.
     // Defense in depth rather than a reachable path: the magnitude field now caps both digits and
-    // scale, so this guards a non-UI caller or a future host. Neither the daemon's
-    // RecordTransaction nor core validates amount, so an unreadable one converting to 0 would
-    // persist as a zero-value transaction.
+    // scale, so this guards a non-UI caller or a future host. Core and the daemon now bound the
+    // amount, so this no longer stands in for a missing server check; it catches a value that
+    // cannot become an int64 at all, which would otherwise reach the daemon as the conversion's
+    // zero fallback and be refused under a message naming the wrong problem.
     //
     // Phrased as an internal error, not as advice to enter a smaller amount: this cannot be
     // reached by user input, and the same failure covers an unreadable value as well as an
@@ -394,8 +395,8 @@ void FinchClient::createRecurringRule(const QVariantMap& params)
 
     // The amount is the one field whose conversion can fail on an input that still looks numeric —
     // an Infinity, or a magnitude outside int64 — and a failed conversion yields 0.
-    // Neither the daemon nor core validates a non-transfer amount, so a 0 would persist as a
-    // rule that silently projects nothing.
+    // Core and the daemon now bound a non-transfer amount too, so this is not standing in for a
+    // missing server check; it catches a value the request cannot carry as an int64 at all.
     bool amountOk = false;
     const qlonglong amount = params.value(QStringLiteral("amount")).toLongLong(&amountOk);
     if (!amountOk) {
