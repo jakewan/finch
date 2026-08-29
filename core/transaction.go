@@ -106,6 +106,9 @@ func (db *DB) RecordTransaction(ctx context.Context, params RecordTransactionPar
 	if !ValidTransactionStatus(params.Status) {
 		return nil, fmt.Errorf("invalid transaction status: %d", params.Status)
 	}
+	if err := validateAmountMagnitude(params.Amount); err != nil {
+		return nil, err
+	}
 
 	id := uuid.New().String()
 
@@ -184,7 +187,7 @@ func (db *DB) UpdateTransactionStatus(ctx context.Context, txnID string, newStat
 	if err := row.Scan(&oldStatus); err != nil {
 		_ = tx.Rollback()
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("transaction %s not found", txnID)
+			return fmt.Errorf("transaction %s not found: %w", txnID, ErrNotFound)
 		}
 		return fmt.Errorf("read current status: %w", err)
 	}
@@ -231,8 +234,11 @@ func (db *DB) CreateTransfer(ctx context.Context, params CreateTransferParams) e
 	if params.SourceAccountID == "" || params.DestinationAccountID == "" {
 		return errors.New("both source and destination account_id must be provided")
 	}
+	if err := validateAmountMagnitude(params.Amount); err != nil {
+		return err
+	}
 	if params.Amount <= 0 {
-		return errors.New("transfer amount must be positive")
+		return fmt.Errorf("transfer amount must be positive, got %d: %w", params.Amount, ErrInvalidInput)
 	}
 	params.Name = strings.TrimSpace(params.Name)
 	if params.Name == "" {
