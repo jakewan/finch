@@ -23,7 +23,7 @@ permissions:
 # Single place to bump these within this workflow. They must stay identical to the pins
 # in mise.toml — the "Verify toolchain pins match mise.toml" step below enforces it.
 env:
-  GO_VERSION: "1.26.5"
+  GO_VERSION: "1.26.7"
   GOLANGCI_LINT_VERSION: "2.12.2"
   GOVULNCHECK_VERSION: "1.6.0"
   BUF_VERSION: "1.66.1"
