@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"math"
 	"net"
 	"path/filepath"
 	"testing"
@@ -242,7 +243,8 @@ func TestProjectBalancesViaGRPC(t *testing.T) {
 	}
 }
 
-// createRulesAccount is a small helper for the recurring-rule error tests below.
+// createRulesAccount is a small helper for the recurring-rule error tests below, and the
+// base account of createTransferPair.
 func createRulesAccount(t *testing.T, client finchv1.FinchServiceClient, ctx context.Context) string {
 	t.Helper()
 	acct, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
@@ -330,6 +332,46 @@ func TestCreateRecurringRuleValidationReturnsInvalidArgument(t *testing.T) {
 				DayOfMonth: 1, IsTransfer: true, TransferTargetAccountId: "some-other-account",
 			},
 		},
+		{
+			name: "zero amount on a non-transfer rule",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "Rent", Amount: 0,
+				Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+				DayOfMonth: 1,
+			},
+		},
+		{
+			name: "amount one past the cap",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "Rent", Amount: core.MaxAmountCents + 1,
+				Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+				DayOfMonth: 1,
+			},
+		},
+		{
+			name: "amount one past the negative cap",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "Rent", Amount: -core.MaxAmountCents - 1,
+				Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+				DayOfMonth: 1,
+			},
+		},
+		{
+			name: "math.MaxInt64 amount",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "Rent", Amount: math.MaxInt64,
+				Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+				DayOfMonth: 1,
+			},
+		},
+		{
+			name: "math.MinInt64 amount",
+			req: &finchv1.CreateRecurringRuleRequest{
+				AccountId: accountID, Name: "Rent", Amount: math.MinInt64,
+				Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+				DayOfMonth: 1,
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -384,6 +426,8 @@ func TestUpdateRecurringRuleAmountTransferRejectsNonPositive(t *testing.T) {
 		t.Fatalf("CreateRecurringRule: %v", err)
 	}
 
+	// The zero row is now answered by the universal magnitude bound before the transfer
+	// rule sees it, so -100000 is the row still proving the positivity check itself.
 	for _, amount := range []int64{0, -100000} {
 		_, err := client.UpdateRecurringRuleAmount(ctx, &finchv1.UpdateRecurringRuleAmountRequest{
 			RuleId: rule.Rule.Id, NewAmount: amount, EffectiveDate: "2025-02-01",
@@ -489,5 +533,233 @@ func TestProjectBalanceOnDateViaGRPC(t *testing.T) {
 	}
 	if resp.Balance != 1000000 {
 		t.Fatalf("expected balance 1000000, got %d", resp.Balance)
+	}
+}
+
+// createTransferPair returns the two distinct accounts a transfer needs. (Nothing
+// currently rejects a transfer whose source and destination are the same account —
+// the recurring-rule path guards that, this one does not.)
+func createTransferPair(t *testing.T, client finchv1.FinchServiceClient, ctx context.Context) (string, string) {
+	t.Helper()
+	source := createRulesAccount(t, client, ctx)
+	dest, err := client.CreateAccount(ctx, &finchv1.CreateAccountRequest{
+		Name: "Savings", Type: finchv1.AccountType_ACCOUNT_TYPE_SAVINGS,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+	return source, dest.Account.Id
+}
+
+// recordTransaction had no daemon validation test at all, so this covers the whole RPC
+// rather than only the amount clause it was added for. Every case is the caller's fault
+// and must surface as InvalidArgument, never Internal (see .claude/rules/api-design.md).
+func TestRecordTransactionValidationReturnsInvalidArgument(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+	accountID := createRulesAccount(t, client, ctx)
+
+	valid := func() *finchv1.RecordTransactionRequest {
+		return &finchv1.RecordTransactionRequest{
+			AccountId: accountID, Date: "2025-01-15", Amount: -5000, Name: "Coffee",
+			Status: finchv1.TransactionStatus_TRANSACTION_STATUS_RECONCILED,
+		}
+	}
+
+	cases := []struct {
+		name  string
+		spoil func(r *finchv1.RecordTransactionRequest)
+	}{
+		{"empty name", func(r *finchv1.RecordTransactionRequest) { r.Name = "" }},
+		{"whitespace name", func(r *finchv1.RecordTransactionRequest) { r.Name = "   " }},
+		{"empty account_id", func(r *finchv1.RecordTransactionRequest) { r.AccountId = "" }},
+		{"whitespace account_id", func(r *finchv1.RecordTransactionRequest) { r.AccountId = "   " }},
+		{"unspecified status", func(r *finchv1.RecordTransactionRequest) {
+			r.Status = finchv1.TransactionStatus_TRANSACTION_STATUS_UNSPECIFIED
+		}},
+		{"malformed date", func(r *finchv1.RecordTransactionRequest) { r.Date = "15-01-2025" }},
+		{"zero amount", func(r *finchv1.RecordTransactionRequest) { r.Amount = 0 }},
+		{"amount one past the cap", func(r *finchv1.RecordTransactionRequest) { r.Amount = core.MaxAmountCents + 1 }},
+		{"amount one past the negative cap", func(r *finchv1.RecordTransactionRequest) { r.Amount = -core.MaxAmountCents - 1 }},
+		{"math.MaxInt64 amount", func(r *finchv1.RecordTransactionRequest) { r.Amount = math.MaxInt64 }},
+		{"math.MinInt64 amount", func(r *finchv1.RecordTransactionRequest) { r.Amount = math.MinInt64 }},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := valid()
+			tc.spoil(req)
+			_, err := client.RecordTransaction(ctx, req)
+			if status.Code(err) != codes.InvalidArgument {
+				t.Fatalf("expected InvalidArgument, got %v (err: %v)", status.Code(err), err)
+			}
+		})
+	}
+}
+
+// The counterpart to the rejections above: the cap itself is a storable amount, and an
+// ordinary signed amount is untouched. Without this, over-gating would pass unnoticed.
+func TestRecordTransactionAcceptsAmountsAtTheCap(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+	accountID := createRulesAccount(t, client, ctx)
+
+	for _, amount := range []int64{core.MaxAmountCents, -core.MaxAmountCents, -5000} {
+		resp, err := client.RecordTransaction(ctx, &finchv1.RecordTransactionRequest{
+			AccountId: accountID, Date: "2025-01-15", Amount: amount, Name: "Coffee",
+			Status: finchv1.TransactionStatus_TRANSACTION_STATUS_RECONCILED,
+		})
+		if err != nil {
+			t.Fatalf("amount %d: RecordTransaction: %v", amount, err)
+		}
+		if resp.Transaction.Amount != amount {
+			t.Errorf("amount %d: stored as %d", amount, resp.Transaction.Amount)
+		}
+	}
+}
+
+// The rule paths carry the same bound. A non-transfer rule is the case with no prior
+// guard at all — the existing positive-magnitude check applies only to transfers.
+func TestCreateRecurringRuleAcceptsAmountsAtTheCap(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+	accountID := createRulesAccount(t, client, ctx)
+
+	for _, amount := range []int64{core.MaxAmountCents, -core.MaxAmountCents} {
+		resp, err := client.CreateRecurringRule(ctx, &finchv1.CreateRecurringRuleRequest{
+			AccountId: accountID, Name: "Rent", Amount: amount,
+			Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+			DayOfMonth: 1,
+		})
+		if err != nil {
+			t.Fatalf("amount %d: CreateRecurringRule: %v", amount, err)
+		}
+		if resp.Rule.Amount != amount {
+			t.Errorf("amount %d: stored as %d", amount, resp.Rule.Amount)
+		}
+	}
+}
+
+// The base rule is deliberately NOT a transfer: TestUpdateRecurringRuleAmountTransferRejectsNonPositive
+// already covers transfers, and a transfer rule here would let the pre-existing positive-magnitude
+// check satisfy every assertion without the magnitude bound existing at all.
+func TestUpdateRecurringRuleAmountRejectsOutOfRangeAmount(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+	accountID := createRulesAccount(t, client, ctx)
+
+	rule, err := client.CreateRecurringRule(ctx, &finchv1.CreateRecurringRuleRequest{
+		AccountId: accountID, Name: "Rent", Amount: -150000,
+		Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+		DayOfMonth: 1,
+	})
+	if err != nil {
+		t.Fatalf("CreateRecurringRule: %v", err)
+	}
+
+	for _, amount := range []int64{0, core.MaxAmountCents + 1, -core.MaxAmountCents - 1, math.MaxInt64, math.MinInt64} {
+		_, err := client.UpdateRecurringRuleAmount(ctx, &finchv1.UpdateRecurringRuleAmountRequest{
+			RuleId: rule.Rule.Id, NewAmount: amount, EffectiveDate: "2025-02-01",
+		})
+		if status.Code(err) != codes.InvalidArgument {
+			t.Errorf("amount %d: expected InvalidArgument, got %v (err: %v)", amount, status.Code(err), err)
+		}
+	}
+}
+
+// Over-gating counterpart for the edit path: a non-transfer rule keeps its free sign at
+// the cap in both directions.
+func TestUpdateRecurringRuleAmountAcceptsAmountsAtTheCap(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+	accountID := createRulesAccount(t, client, ctx)
+
+	rule, err := client.CreateRecurringRule(ctx, &finchv1.CreateRecurringRuleRequest{
+		AccountId: accountID, Name: "Rent", Amount: -150000,
+		Frequency: finchv1.Frequency_FREQUENCY_MONTHLY, StartDate: "2025-01-01",
+		DayOfMonth: 1,
+	})
+	if err != nil {
+		t.Fatalf("CreateRecurringRule: %v", err)
+	}
+
+	for _, amount := range []int64{core.MaxAmountCents, -core.MaxAmountCents} {
+		if _, err := client.UpdateRecurringRuleAmount(ctx, &finchv1.UpdateRecurringRuleAmountRequest{
+			RuleId: rule.Rule.Id, NewAmount: amount, EffectiveDate: "2025-02-01",
+		}); err != nil {
+			t.Errorf("amount %d: UpdateRecurringRuleAmount: %v", amount, err)
+		}
+	}
+}
+
+// A transfer stacks two rules: the universal magnitude bound and its own positive-magnitude
+// requirement. The blank-name case is here because core rejects it while this handler did
+// not, so it reached the caller as Internal rather than InvalidArgument.
+func TestCreateTransferValidationReturnsInvalidArgument(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+	source, dest := createTransferPair(t, client, ctx)
+
+	valid := func() *finchv1.CreateTransferRequest {
+		return &finchv1.CreateTransferRequest{
+			SourceAccountId: source, DestinationAccountId: dest, Amount: 100000,
+			Date: "2025-01-15", Name: "To Savings",
+			Status: finchv1.TransactionStatus_TRANSACTION_STATUS_RECONCILED,
+		}
+	}
+
+	cases := []struct {
+		name  string
+		spoil func(r *finchv1.CreateTransferRequest)
+	}{
+		{"zero amount", func(r *finchv1.CreateTransferRequest) { r.Amount = 0 }},
+		{"negative amount", func(r *finchv1.CreateTransferRequest) { r.Amount = -100000 }},
+		{"amount one past the cap", func(r *finchv1.CreateTransferRequest) { r.Amount = core.MaxAmountCents + 1 }},
+		{"math.MaxInt64 amount", func(r *finchv1.CreateTransferRequest) { r.Amount = math.MaxInt64 }},
+		{"empty name", func(r *finchv1.CreateTransferRequest) { r.Name = "" }},
+		{"whitespace name", func(r *finchv1.CreateTransferRequest) { r.Name = "   " }},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := valid()
+			tc.spoil(req)
+			_, err := client.CreateTransfer(ctx, req)
+			if status.Code(err) != codes.InvalidArgument {
+				t.Fatalf("expected InvalidArgument, got %v (err: %v)", status.Code(err), err)
+			}
+		})
+	}
+}
+
+// Both accounts must exist for the write to land — foreign keys are on. The amount check
+// itself runs before any database access, so this proves the cap is storable, not merely
+// that it passes validation.
+func TestCreateTransferAcceptsAmountAtTheCap(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+	source, dest := createTransferPair(t, client, ctx)
+
+	if _, err := client.CreateTransfer(ctx, &finchv1.CreateTransferRequest{
+		SourceAccountId: source, DestinationAccountId: dest, Amount: core.MaxAmountCents,
+		Date: "2025-01-15", Name: "To Savings",
+		Status: finchv1.TransactionStatus_TRANSACTION_STATUS_RECONCILED,
+	}); err != nil {
+		t.Fatalf("CreateTransfer at the cap: %v", err)
+	}
+}
+
+// A missing transaction is a NotFound, not a daemon failure — the same distinction the
+// recurring-rule operations already draw. Core names the condition; the daemon must carry it.
+func TestUpdateTransactionStatusUnknownTransactionReturnsNotFound(t *testing.T) {
+	client := startTestServer(t)
+	ctx := context.Background()
+
+	_, err := client.UpdateTransactionStatus(ctx, &finchv1.UpdateTransactionStatusRequest{
+		TransactionId: "00000000-0000-0000-0000-000000000000",
+		NewStatus:     finchv1.TransactionStatus_TRANSACTION_STATUS_RECONCILED,
+	})
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("expected NotFound, got %v (err: %v)", status.Code(err), err)
 	}
 }
