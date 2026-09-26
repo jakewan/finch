@@ -4,9 +4,7 @@ paths: "app/**/*"
 
 # UI Decision Rubric
 
-*Supplies the `design-fork-adjudication` extension point, scoped to UI forks. The slot marker is metadata only; the lenses below read as standalone project guidance without it.*
-
-When a user-facing design fork has no obvious answer, walk these lenses and record which one settled it. They are listed in rough priority — an earlier lens tends to dominate a later one — but this is a heuristic, not a mechanical tie-break; a genuine lens-vs-lens conflict is a decision to make in the open, not to resolve by list position alone.
+When a user-facing design fork has no obvious answer, walk these lenses and record which one decided your lean. They are listed in rough priority — an earlier lens tends to dominate a later one — but this is a heuristic, not a mechanical tie-break; a genuine lens-vs-lens conflict is a decision to make in the open, not to resolve by list position alone.
 
 1. **Locality of action** — Put a write action where the user's attention and data context already are, not on a separate screen they must navigate to.
 2. **Pattern consistency** — Echo an established in-app pattern unless an earlier lens says otherwise (e.g. "a screen hosts its create-form inline above the list").
