@@ -4,7 +4,7 @@ paths: "app/**/*"
 
 # UI Decision Rubric
 
-When a user-facing design fork has no obvious answer, walk these lenses and record which one decided your lean. They are listed in rough priority — an earlier lens tends to dominate a later one — but this is a heuristic, not a mechanical tie-break; a genuine lens-vs-lens conflict is surfaced as a choice with your lean, not resolved by list position alone.
+When a UI design fork has no obvious answer, walk these lenses and record which one decided your lean. They are listed in rough priority — an earlier lens tends to dominate a later one — but this is a heuristic, not a mechanical tie-break; a genuine lens-vs-lens conflict is surfaced as a choice with your lean, not resolved by list position alone.
 
 1. **Locality of action** — Put a write action where the user's attention and data context already are, not on a separate screen they must navigate to.
 2. **Pattern consistency** — Echo an established in-app pattern unless an earlier lens says otherwise (e.g. "a screen hosts its create-form inline above the list").

@@ -1,5 +1,5 @@
-# Design Forks
+# UI Design Forks
 
 (extension point: `design-fork-adjudication`)
 
-A user-facing design fork is weighed on the lenses in `.claude/rules/ui-decisions.md`. Read it before choosing between, or presenting, options for a UI fork.
+A design fork in the Qt app's UI is weighed on the UX lenses in `.claude/rules/ui-decisions.md` and on the engineering-constraint axis that rubric sets beside them. Read it before choosing between, or presenting, options for such a fork. Forks outside the Qt app's UI, such as MCP tool or API shape, get no lens from this rule.
