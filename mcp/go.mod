@@ -1,6 +1,6 @@
 module github.com/jakewan/finch/mcp
 
-go 1.25.0
+go 1.26.0
 
 replace github.com/jakewan/finch/daemon => ../daemon
 
@@ -10,7 +10,7 @@ require (
 	github.com/jakewan/finch/core v0.0.0-00010101000000-000000000000
 	github.com/jakewan/finch/daemon v0.0.0-00010101000000-000000000000
 	github.com/modelcontextprotocol/go-sdk v1.4.1
-	google.golang.org/grpc v1.82.1
+	google.golang.org/grpc v1.83.2
 )
 
 require (
@@ -23,11 +23,11 @@ require (
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	modernc.org/libc v1.74.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
